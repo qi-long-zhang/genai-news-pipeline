@@ -1,0 +1,19 @@
+# Environment variables
+.env
+.envrc
+
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.Python
+
+# Virtual environments
+venv/
+env/
+
+# Scrapy
+.scrapy/
+
+# OS
+.DS_Store
