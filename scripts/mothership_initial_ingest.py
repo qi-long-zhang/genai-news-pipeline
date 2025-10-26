@@ -138,6 +138,7 @@ def save_initial_tweets():
             processed_tweet = extract_tweet_fields(tweet)
             processed_tweet["source_account"] = TARGET_ACCOUNT
             processed_tweet["needs_update"] = False
+            processed_tweet["needs_scraping"] = True  # Mark for scraping
 
             processed_tweets.append(processed_tweet)
 
