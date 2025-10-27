@@ -1,6 +1,7 @@
 import scrapy
 from dateutil import parser
 from pymongo import MongoClient
+from urllib.parse import urljoin
 
 from Tweet2News.items import NewsArticleItem
 
@@ -62,6 +63,8 @@ class MothershipSpider(scrapy.Spider):
             tag = text_node.root.tag
             all_text = text_node.xpath(".//text()[not(ancestor::figure)]").getall()
             text = _clean(" ".join(t.strip() for t in all_text if t.strip()))
+            if tag == "h2" and text == "Related stories":
+                continue
             if text:
                 content.append({"tag": tag, "text": text})
         item["content"] = content
@@ -106,5 +109,13 @@ class MothershipSpider(scrapy.Spider):
                 {"url": link_url, "text": link_text, "is_internal": is_internal}
             )
         item["links"] = links
+
+        embeds = []
+        embed_nodes = content_section.css("iframe[src^='/']")
+        for embed_node in embed_nodes:
+            embed_url = _clean(embed_node.css("::attr(src)").get())
+            if embed_url:
+                embeds.append(urljoin(response.url, embed_url))
+        item["embeds"] = embeds
 
         yield item

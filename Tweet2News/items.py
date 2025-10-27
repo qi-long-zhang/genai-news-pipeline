@@ -29,3 +29,4 @@ class NewsArticleItem(scrapy.Item):
     images = scrapy.Field()
     videos = scrapy.Field()
     links = scrapy.Field()
+    embeds = scrapy.Field()
