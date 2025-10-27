@@ -9,7 +9,6 @@ jobs:
   crawl:
     runs-on: ubuntu-latest
     env:
-      SCRAPY_SETTINGS_MODULE: Tweet2News.settings
       MONGO_URI: ${{ secrets.MONGO_URI }}
       MONGO_DATABASE: ${{ secrets.MONGO_DATABASE }}
       MONGO_COLLECTION: ${{ secrets.MONGO_COLLECTION }}
