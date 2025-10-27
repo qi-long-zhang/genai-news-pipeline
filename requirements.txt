@@ -1,0 +1,6 @@
+cloudscraper>=1.2
+pymongo>=4.14
+python-dateutil>=2.8
+python-dotenv>=1.1
+requests>=2.32
+scrapy>=2.13

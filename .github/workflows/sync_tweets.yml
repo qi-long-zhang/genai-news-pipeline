@@ -1,0 +1,30 @@
+name: Sync Tweets
+
+on:
+  workflow_dispatch:
+  repository_dispatch:
+    types: [sync-tweets]
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    env:
+      API_KEY: ${{ secrets.API_KEY }}
+      TARGET_ACCOUNT: ${{ secrets.TARGET_ACCOUNT }}
+      MONGO_URI: ${{ secrets.MONGO_URI }}
+      MONGO_DATABASE: ${{ secrets.MONGO_DATABASE }}
+      MONGO_COLLECTION: ${{ secrets.MONGO_COLLECTION }}
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      - name: Run tweet sync
+        run: python scripts/sync_tweets.py
