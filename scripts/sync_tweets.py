@@ -77,7 +77,7 @@ def update_tweets():
 
     now = datetime.now(timezone.utc)
     tweet_cursor = collection.find(
-        {"needs_update": True, "created_at": {"$lte": now - timedelta(days=5)}},
+        {"needs_update": True, "created_at": {"$lte": now - timedelta(days=7)}},
         projection={"_id": 1, "created_at": 1},
     )
 
@@ -238,7 +238,7 @@ def ingest_fresh_tweets():
             processed_tweet["source_account"] = TARGET_ACCOUNT
             processed_tweet["needs_update"] = until_time - processed_tweet[
                 "created_at"
-            ] <= timedelta(days=5)
+            ] <= timedelta(days=7)  # Mark for update if within 7 days
             processed_tweet["needs_scraping"] = True  # Mark for scraping
 
             processed_tweets.append(processed_tweet)
