@@ -90,14 +90,11 @@ def update_tweets():
 
     print(f"Found {len(tweets_to_update)} tweets to update engagement metrics.")
 
-    # Construct the query
-    query = f"tweets_ids:{tweets_to_update}"
-
     # API endpoint
     url = "https://api.twitterapi.io/twitter/tweets"
 
     # Request parameters
-    params = {"query": query, "queryType": "Latest"}
+    params = {"tweet_ids": ",".join(str(tid) for tid in tweets_to_update)}
 
     # Headers with API key
     headers = {"X-API-Key": API_KEY}
