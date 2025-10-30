@@ -9,7 +9,7 @@ def main():
     db = client[os.getenv("MONGO_DATABASE")]
     collection = db[os.getenv("MONGO_COLLECTION")]
 
-    result = collection.update_many({}, {"$set": {"needs_scraping": True}})
+    result = collection.update_many({}, {"$set": {"needs_update": True}})
     print(f"matched: {result.matched_count}, modified:{result.modified_count}")
     client.close()
 
