@@ -4,6 +4,8 @@ from pymongo import MongoClient
 import os
 from dotenv import load_dotenv
 import time
+from urllib3.util import Retry
+from requests.adapters import HTTPAdapter
 
 # Load environment variables from .env file
 load_dotenv()
@@ -14,6 +16,17 @@ TARGET_ACCOUNT = os.getenv("TARGET_ACCOUNT")  # The account you want to monitor
 MONGO_URI = os.getenv("MONGO_URI")  # MongoDB Atlas connection string
 MONGO_DATABASE = os.getenv("MONGO_DATABASE")  # Database name
 MONGO_COLLECTION = os.getenv("MONGO_COLLECTION")  # Collection name
+
+retries = Retry(
+    total=3,
+    backoff_factor=1,
+    status_forcelist=[429, 500, 502, 503, 504],
+    allowed_methods=["HEAD"],
+)
+adapter = HTTPAdapter(max_retries=retries)
+session = requests.Session()
+session.mount("http://", adapter)
+session.mount("https://", adapter)
 
 
 def parse_twitter_time(time_str):
@@ -32,8 +45,11 @@ def expand_url(short_url):
     """
     if not short_url:
         return None
-    # Send HEAD request to follow redirects without downloading content
-    response = requests.head(short_url, allow_redirects=True, timeout=5)
+    response = session.head(
+        short_url,
+        allow_redirects=True,
+        timeout=(5, 10),  # connect timeout, read timeout
+    )
     return response.url
 
 
