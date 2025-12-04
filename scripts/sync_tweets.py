@@ -243,13 +243,34 @@ def ingest_fresh_tweets():
             break
 
     if all_tweets:
-        # Process all collected tweets
-        print(f"Found {len(all_tweets)} total tweets from {TARGET_ACCOUNT}!")
+        # Filter out tweets not from the target account to guard against noisy API results
+        filtered_tweets = [
+            tweet
+            for tweet in all_tweets
+            if (tweet.get("author") or {}).get("userName", "") == TARGET_ACCOUNT
+        ]
+        skipped = len(all_tweets) - len(filtered_tweets)
+
+        if skipped:
+            print(
+                f"Skipped {skipped} tweets not from @{TARGET_ACCOUNT} returned by the API."
+            )
+
+        if not filtered_tweets:
+            print(
+                "No tweets from the target account after filtering; nothing will be inserted."
+            )
+            client.close()
+            return
+
+        print(
+            f"Found {len(filtered_tweets)} total tweets from {TARGET_ACCOUNT} after filtering."
+        )
 
         # Extract only the fields we need and add metadata
         processed_tweets = []
 
-        for tweet in all_tweets:
+        for tweet in filtered_tweets:
             processed_tweet = extract_tweet_fields(tweet)
             processed_tweet["source_account"] = TARGET_ACCOUNT
             processed_tweet["needs_update"] = until_time - processed_tweet[
