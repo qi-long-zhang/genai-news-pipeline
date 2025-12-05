@@ -201,8 +201,11 @@ def ingest_fresh_tweets():
     since_str = since_time.strftime("%Y-%m-%d_%H:%M:%S_UTC")
     until_str = until_time.strftime("%Y-%m-%d_%H:%M:%S_UTC")
 
+    print(f"since_str: {since_str}")
+    print(f"until_str: {until_str}")
+
     # Construct the query
-    query = f"from:{TARGET_ACCOUNT} since:{since_str} until:{until_str}"
+    query = f"from:{TARGET_ACCOUNT} since:{since_str} until:{until_str} include:nativeretweets"
 
     # API endpoint
     url = "https://api.twitterapi.io/twitter/tweet/advanced_search"
