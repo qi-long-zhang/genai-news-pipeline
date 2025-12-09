@@ -104,7 +104,7 @@ def update_tweets():
         client.close()
         return
 
-    print(f"Found {len(tweets_to_update)} tweets to update engagement metrics.")
+    print(f"Requesting engagement updates for {len(tweets_to_update)} tweets.")
 
     # API endpoint
     url = "https://api.twitterapi.io/twitter/tweets"
@@ -115,34 +115,20 @@ def update_tweets():
     # Headers with API key
     headers = {"X-API-Key": API_KEY}
 
-    # Make the request and handle pagination
+    # Make the request (API returns all requested tweets in one call)
     all_tweets = []
-    next_cursor = None
+    response = requests.get(url, headers=headers, params=params)
 
-    while True:
-        # Add cursor to params if we have one
-        if next_cursor:
-            params["cursor"] = next_cursor
+    if response.status_code == 200:
+        data = response.json()
+        all_tweets = data.get("tweets", [])
+    else:
+        print(f"Error: {response.status_code} - {response.text}")
+        all_tweets = []
 
-        response = requests.get(url, headers=headers, params=params)
-
-        # Parse the response
-        if response.status_code == 200:
-            data = response.json()
-            tweets = data.get("tweets", [])
-
-            if tweets:
-                all_tweets.extend(tweets)
-
-            # Check if there are more pages
-            next_cursor_value = data.get("next_cursor")
-            if data.get("has_next_page", False) and next_cursor_value:
-                next_cursor = next_cursor_value
-                continue
-            break
-        else:
-            print(f"Error: {response.status_code} - {response.text}")
-            break
+    print(
+        f"API returned {len(all_tweets)} tweets for engagement updates (requested {len(tweets_to_update)})."
+    )
 
     if all_tweets:
         # Update engagement data for each tweet
