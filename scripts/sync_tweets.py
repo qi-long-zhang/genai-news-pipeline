@@ -104,6 +104,8 @@ def update_tweets():
         client.close()
         return
 
+    print(f"Requesting engagement updates for {len(tweets_to_update)} tweets.")
+
     # API endpoint
     url = "https://api.twitterapi.io/twitter/tweets"
 
@@ -230,25 +232,17 @@ def ingest_fresh_tweets():
             break
 
     if all_tweets:
-        # Filter out tweets not from the target account or outside the expected time range
-        filtered_tweets = []
-        skipped = 0
-
-        for tweet in all_tweets:
-            if (tweet.get("author") or {}).get("userName", "") != TARGET_ACCOUNT:
-                skipped += 1
-                continue
-
-            created_at = parse_twitter_time(tweet.get("createdAt"))
-            if not created_at or created_at < since_time or created_at > until_time:
-                skipped += 1
-                continue
-
-            filtered_tweets.append(tweet)
+        # Filter out tweets not from the target account to guard against noisy API results
+        filtered_tweets = [
+            tweet
+            for tweet in all_tweets
+            if (tweet.get("author") or {}).get("userName", "") == TARGET_ACCOUNT
+        ]
+        skipped = len(all_tweets) - len(filtered_tweets)
 
         if skipped:
             print(
-                f"Skipped {skipped} tweets not matching @{TARGET_ACCOUNT} or outside {since_time} to {until_time}."
+                f"Skipped {skipped} tweets not from @{TARGET_ACCOUNT} returned by the API."
             )
 
         if not filtered_tweets:
