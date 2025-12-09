@@ -104,8 +104,6 @@ def update_tweets():
         client.close()
         return
 
-    print(f"Requesting engagement updates for {len(tweets_to_update)} tweets.")
-
     # API endpoint
     url = "https://api.twitterapi.io/twitter/tweets"
 
