@@ -177,6 +177,10 @@ def ingest_fresh_tweets():
     )
     latest_created_at = latest_record.get("created_at")
 
+    # Normalize to UTC for consistent comparisons
+    if latest_created_at:
+        latest_created_at = latest_created_at.astimezone(timezone.utc)
+
     # Format times for the API query
     since_time = latest_created_at + timedelta(seconds=1)
     until_time = datetime.now(timezone.utc)
@@ -230,17 +234,25 @@ def ingest_fresh_tweets():
             break
 
     if all_tweets:
-        # Filter out tweets not from the target account to guard against noisy API results
-        filtered_tweets = [
-            tweet
-            for tweet in all_tweets
-            if (tweet.get("author") or {}).get("userName", "") == TARGET_ACCOUNT
-        ]
-        skipped = len(all_tweets) - len(filtered_tweets)
+        # Filter out tweets not from the target account or outside the expected time range
+        filtered_tweets = []
+        skipped = 0
+
+        for tweet in all_tweets:
+            if (tweet.get("author") or {}).get("userName", "") != TARGET_ACCOUNT:
+                skipped += 1
+                continue
+
+            created_at = parse_twitter_time(tweet.get("createdAt"))
+            if not created_at or created_at < since_time or created_at > until_time:
+                skipped += 1
+                continue
+
+            filtered_tweets.append(tweet)
 
         if skipped:
             print(
-                f"Skipped {skipped} tweets not from @{TARGET_ACCOUNT} returned by the API."
+                f"Skipped {skipped} tweets not matching @{TARGET_ACCOUNT} or outside {since_time} to {until_time}."
             )
 
         if not filtered_tweets:
