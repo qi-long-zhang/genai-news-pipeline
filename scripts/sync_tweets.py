@@ -116,9 +116,9 @@ def update_tweets():
     headers = {"X-API-Key": API_KEY}
 
     # Make the request (API returns all requested tweets in one call)
-    all_tweets = []
     response = requests.get(url, headers=headers, params=params)
 
+    # Parse the response
     if response.status_code == 200:
         data = response.json()
         all_tweets = data.get("tweets", [])
