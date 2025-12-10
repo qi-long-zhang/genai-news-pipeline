@@ -108,7 +108,7 @@ def update_tweets():
     url = "https://api.twitterapi.io/twitter/tweets"
 
     # Request parameters
-    params = {"tweet_ids": ",".join(str(tid) for tid in tweets_to_update)}
+    params = {"tweet_ids": ",".join(tweets_to_update)}
 
     # Headers with API key
     headers = {"X-API-Key": API_KEY}
@@ -124,9 +124,26 @@ def update_tweets():
         print(f"Error: {response.status_code} - {response.text}")
         all_tweets = []
 
-    print(
-        f"API returned {len(all_tweets)} tweets for engagement updates (requested {len(tweets_to_update)})."
-    )
+    print(f"Found {len(tweets_to_update)} tweets for engagement update.")
+    print(f"API returned {len(all_tweets)} tweets for engagement updates.")
+    print(f"Response message: {data.get('message', '')}")
+
+    if len(all_tweets) < len(tweets_to_update):
+        missing_tweets = set(tweets_to_update) - set(
+            tweet.get("id") for tweet in all_tweets
+        )
+        retry_response = requests.get(
+            url,
+            headers=headers,
+            params={"tweet_ids": ",".join(missing_tweets)},
+        )
+        if retry_response.status_code == 200:
+            retry_data = retry_response.json()
+            retry_tweets = retry_data.get("tweets", [])
+            all_tweets.extend(retry_tweets)
+            print(f"After retry, API returned {len(retry_tweets)} additional tweets.")
+        else:
+            print(f"Retry Error: {retry_response.status_code} - {retry_response.text}")
 
     if all_tweets:
         # Update engagement data for each tweet
@@ -188,9 +205,6 @@ def ingest_fresh_tweets():
     # Format times as strings in the format Twitter's API expects
     since_str = since_time.strftime("%Y-%m-%d_%H:%M:%S_UTC")
     until_str = until_time.strftime("%Y-%m-%d_%H:%M:%S_UTC")
-
-    print(f"since_str: {since_str}")
-    print(f"until_str: {until_str}")
 
     # Construct the query
     query = f"from:{TARGET_ACCOUNT} since:{since_str} until:{until_str} include:nativeretweets"
