@@ -124,7 +124,7 @@ def update_tweets():
         print(f"Error: {response.status_code} - {response.text}")
         all_tweets = []
 
-    print(f"Found {len(tweets_to_update)} tweets for engagement update.")
+    print(f"Found {len(tweets_to_update)} tweets for engagement updates.")
     print(f"API returned {len(all_tweets)} tweets for engagement updates.")
     print(f"Response message: {data.get('message', '')}")
 
