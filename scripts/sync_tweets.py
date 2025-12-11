@@ -85,6 +85,11 @@ def extract_tweet_fields(tweet):
     }
 
 
+def chunked(sequence, size):
+    for index in range(0, len(sequence), size):
+        yield sequence[index : index + size]
+
+
 def update_tweets():
     # Connect to MongoDB
     client = MongoClient(MONGO_URI)
@@ -104,46 +109,47 @@ def update_tweets():
         client.close()
         return
 
+    print(f"Found {len(tweets_to_update)} tweets for engagement updates.")
+
     # API endpoint
     url = "https://api.twitterapi.io/twitter/tweets"
-
-    # Request parameters
-    params = {"tweet_ids": ",".join(tweets_to_update)}
 
     # Headers with API key
     headers = {"X-API-Key": API_KEY}
 
-    # Make the request (API returns all requested tweets in one call)
-    response = requests.get(url, headers=headers, params=params)
+    all_tweets = []
 
-    # Parse the response
-    if response.status_code == 200:
-        data = response.json()
-        all_tweets = data.get("tweets", [])
-    else:
-        print(f"Error: {response.status_code} - {response.text}")
-        all_tweets = []
-
-    print(f"Found {len(tweets_to_update)} tweets for engagement updates.")
-    print(f"API returned {len(all_tweets)} tweets for engagement updates.")
-    print(f"Response message: {data.get('message', '')}")
-
-    if len(all_tweets) < len(tweets_to_update):
-        missing_tweets = set(tweets_to_update) - set(
-            tweet.get("id") for tweet in all_tweets
-        )
-        retry_response = requests.get(
+    def fetch_batch(id_chunk, label):
+        nonlocal all_tweets
+        response = requests.get(
             url,
             headers=headers,
-            params={"tweet_ids": ",".join(missing_tweets)},
+            params={"tweet_ids": ",".join(id_chunk)},
         )
-        if retry_response.status_code == 200:
-            retry_data = retry_response.json()
-            retry_tweets = retry_data.get("tweets", [])
-            all_tweets.extend(retry_tweets)
-            print(f"After retry, API returned {len(retry_tweets)} additional tweets.")
+
+        if response.status_code == 200:
+            data = response.json()
+            tweets = data.get("tweets", [])
+            all_tweets.extend(tweets)
         else:
-            print(f"Retry Error: {retry_response.status_code} - {retry_response.text}")
+            print(f"{label} Error: {response.status_code} - {response.text}")
+
+    for chunk in chunked(tweets_to_update, 3):
+        fetch_batch(chunk, f"Primary batch {chunk}")
+        time.sleep(0.1)  # Small delay to avoid hitting rate limits
+
+    returned_ids = {tweet.get("id") for tweet in all_tweets}
+    missing_tweets = [tid for tid in tweets_to_update if tid not in returned_ids]
+
+    if missing_tweets:
+        for chunk in chunked(missing_tweets, 3):
+            fetch_batch(chunk, f"Retry batch {chunk}")
+            time.sleep(0.1)  # Small delay to avoid hitting rate limits
+        print(
+            f"API returned {len(all_tweets)} tweets for engagement updates after retry."
+        )
+    else:
+        print(f"API returned {len(all_tweets)} tweets for engagement updates.")
 
     if all_tweets:
         # Update engagement data for each tweet
