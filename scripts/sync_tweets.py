@@ -141,12 +141,19 @@ def update_tweets():
     returned_ids = {tweet.get("id") for tweet in all_tweets}
     missing_tweets = [tid for tid in tweets_to_update if tid not in returned_ids]
 
-    if missing_tweets:
+    retry_count = 0
+    max_retries = 3
+    while missing_tweets and retry_count < max_retries:
+        retry_count += 1
         for chunk in chunked(missing_tweets, 3):
             fetch_batch(chunk, f"Retry batch {chunk}")
             time.sleep(0.1)  # Small delay to avoid hitting rate limits
+        returned_ids = {tweet.get("id") for tweet in all_tweets}
+        missing_tweets = [tid for tid in tweets_to_update if tid not in returned_ids]
+
+    if missing_tweets:
         print(
-            f"API returned {len(all_tweets)} tweets for engagement updates after retry."
+            f"Stopped after {retry_count} retries; {len(missing_tweets)} tweets still missing: {missing_tweets}"
         )
     else:
         print(f"API returned {len(all_tweets)} tweets for engagement updates.")
