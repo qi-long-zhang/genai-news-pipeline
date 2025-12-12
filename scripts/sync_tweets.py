@@ -142,7 +142,7 @@ def update_tweets():
     missing_tweets = [tid for tid in tweets_to_update if tid not in returned_ids]
 
     retry_count = 0
-    max_retries = 3
+    max_retries = 2
     while missing_tweets and retry_count < max_retries:
         retry_count += 1
         for chunk in chunked(missing_tweets, 3):
