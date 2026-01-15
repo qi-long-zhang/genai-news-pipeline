@@ -320,6 +320,11 @@ def ingest_fresh_tweets(target_account, mongo_collection):
                     == "https://www.straitstimes.com/"
                 ):
                     continue
+                if (
+                    processed_tweet.get("article_url")
+                    == "https://www.straitstimes.com/global"
+                ):
+                    continue
                 if processed_tweet.get("cover_image") is None:
                     continue
 
@@ -334,6 +339,23 @@ def ingest_fresh_tweets(target_account, mongo_collection):
             print("No tweets remaining after account-specific filtering.")
             client.close()
             return
+
+        # Deduplicate based on article_url:
+        # If a tweet in the new batch has an article_url that already exists in the DB,
+        # delete the existing document(s) in the DB to allow the new one to take precedence.
+        # This ensures we don't have multiple tweets pointing to the same article,
+        # and we prefer the latest tweet (assuming fresh ingest is newer).
+        article_urls = [
+            t.get("article_url") for t in processed_tweets if t.get("article_url")
+        ]
+        if article_urls:
+            delete_result = collection.delete_many(
+                {"article_url": {"$in": article_urls}}
+            )
+            if delete_result.deleted_count > 0:
+                print(
+                    f"Deleted {delete_result.deleted_count} existing documents with duplicate article_urls."
+                )
 
         # Insert all tweets at once
         result = collection.insert_many(processed_tweets, ordered=False)
