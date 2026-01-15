@@ -12,10 +12,10 @@ load_dotenv()
 
 # Configuration
 API_KEY = os.getenv("API_KEY")
-TARGET_ACCOUNT = os.getenv("TARGET_ACCOUNT")  # The account you want to monitor
-MONGO_URI = os.getenv("MONGO_URI")  # MongoDB Atlas connection string
-MONGO_DATABASE = os.getenv("MONGO_DATABASE")  # Database name
-MONGO_COLLECTION = os.getenv("MONGO_COLLECTION")  # Collection name
+TARGET_ACCOUNTS = os.getenv("TARGET_ACCOUNTS", "").split(",")
+MONGO_URI = os.getenv("MONGO_URI")
+MONGO_DATABASE = os.getenv("MONGO_DATABASE")
+MONGO_COLLECTIONS = os.getenv("MONGO_COLLECTIONS", "").split(",")
 
 retries = Retry(
     total=3,
@@ -53,11 +53,19 @@ def expand_url(short_url):
     return response.url
 
 
-def extract_tweet_fields(tweet):
+def extract_tweet_fields(tweet, target_account=None):
     """Extract only the fields we want to store in the database"""
     # Safely extract cover image (first media item if exists)
     media_list = tweet.get("extendedEntities", {}).get("media", [])
     cover_image = media_list[0].get("media_url_https") if media_list else None
+
+    # Specific handling for straits_times cover image
+    if target_account == "straits_times" and not cover_image:
+        binding_values = tweet.get("card", {}).get("binding_values", [])
+        for item in binding_values:
+            if item.get("key") == "summary_photo_image_original":
+                cover_image = item.get("value", {}).get("image_value", {}).get("url")
+                break
 
     # Safely extract article URL (first URL if exists) and expand it
     urls_list = tweet.get("entities", {}).get("urls", [])
@@ -92,11 +100,11 @@ def chunked(sequence, size):
         yield sequence[index : index + size]
 
 
-def update_tweets():
+def update_tweets(target_account, mongo_collection):
     # Connect to MongoDB
     client = MongoClient(MONGO_URI)
     db = client[MONGO_DATABASE]
-    collection = db[MONGO_COLLECTION]
+    collection = db[mongo_collection]
 
     now = datetime.now(timezone.utc)
     tweet_cursor = collection.find(
@@ -196,11 +204,11 @@ def update_tweets():
     client.close()
 
 
-def ingest_fresh_tweets():
+def ingest_fresh_tweets(target_account, mongo_collection):
     # Connect to MongoDB
     client = MongoClient(MONGO_URI)
     db = client[MONGO_DATABASE]
-    collection = db[MONGO_COLLECTION]
+    collection = db[mongo_collection]
 
     # Retrieve the latest record and lasted created_at
     latest_record = collection.find_one(
@@ -222,7 +230,7 @@ def ingest_fresh_tweets():
     until_str = until_time.strftime("%Y-%m-%d_%H:%M:%S_UTC")
 
     # Construct the query
-    query = f"from:{TARGET_ACCOUNT} since:{since_str} until:{until_str} include:nativeretweets"
+    query = f"from:{target_account} since:{since_str} until:{until_str}"
 
     # API endpoint
     url = "https://api.twitterapi.io/twitter/tweet/advanced_search"
@@ -268,7 +276,7 @@ def ingest_fresh_tweets():
         skipped = 0
 
         for tweet in all_tweets:
-            if (tweet.get("author") or {}).get("userName", "") != TARGET_ACCOUNT:
+            if (tweet.get("author") or {}).get("userName", "") != target_account:
                 skipped += 1
                 continue
 
@@ -281,7 +289,7 @@ def ingest_fresh_tweets():
 
         if skipped:
             print(
-                f"Skipped {skipped} tweets not matching @{TARGET_ACCOUNT} or outside {since_time} to {until_time}."
+                f"Skipped {skipped} tweets not matching @{target_account} or outside {since_time} to {until_time}."
             )
 
         if not filtered_tweets:
@@ -292,14 +300,26 @@ def ingest_fresh_tweets():
             return
 
         print(
-            f"Found {len(filtered_tweets)} total tweets from {TARGET_ACCOUNT} after filtering."
+            f"Found {len(filtered_tweets)} total tweets from {target_account} after filtering."
         )
 
         # Extract only the fields we need and add metadata
         processed_tweets = []
 
         for tweet in filtered_tweets:
-            processed_tweet = extract_tweet_fields(tweet)
+            # Account specific pre-processing filtering for straits_times
+            if target_account == "straits_times" and tweet.get("card") is None:
+                continue
+
+            processed_tweet = extract_tweet_fields(tweet, target_account)
+
+            # Account specific filtering
+            if target_account == "straits_times":
+                if processed_tweet.get("article_url") == "https://www.straitstimes.com/":
+                    continue
+                if processed_tweet.get("cover_image") is None:
+                    continue
+
             processed_tweet["needs_update"] = until_time - processed_tweet[
                 "created_at"
             ] <= timedelta(days=7)  # Mark for update if within 7 days
@@ -307,22 +327,44 @@ def ingest_fresh_tweets():
 
             processed_tweets.append(processed_tweet)
 
+        if not processed_tweets:
+            print("No tweets remaining after account-specific filtering.")
+            client.close()
+            return
+
         # Insert all tweets at once
         result = collection.insert_many(processed_tweets, ordered=False)
         print(f"Successfully inserted {len(result.inserted_ids)} tweets into MongoDB!")
     else:
-        print(f"No tweets found from {TARGET_ACCOUNT} in the specified time range.")
+        print(f"No tweets found from {target_account} in the specified time range.")
 
     # Close the connection
     client.close()
 
 
 def main():
-    print(f"Starting to update tweets from @{TARGET_ACCOUNT}")
-    update_tweets()
-    time.sleep(1)  # Small delay between operations
-    print(f"Starting to ingest fresh tweets from @{TARGET_ACCOUNT}")
-    ingest_fresh_tweets()
+    if len(TARGET_ACCOUNTS) != len(MONGO_COLLECTIONS):
+        print(
+            "Error: The number of TARGET_ACCOUNTS must match the number of MONGO_COLLECTIONS."
+        )
+        return
+
+    for target_account, mongo_collection in zip(TARGET_ACCOUNTS, MONGO_COLLECTIONS):
+        target_account = target_account.strip()
+        mongo_collection = mongo_collection.strip()
+
+        if not target_account or not mongo_collection:
+            continue
+
+        print(
+            f"--- Processing Account: @{target_account} (Collection: {mongo_collection}) ---"
+        )
+        print(f"Starting to update tweets from @{target_account}")
+        update_tweets(target_account, mongo_collection)
+        time.sleep(1)  # Small delay between operations
+        print(f"Starting to ingest fresh tweets from @{target_account}")
+        ingest_fresh_tweets(target_account, mongo_collection)
+        print(f"--- Finished Account: @{target_account} ---\n")
 
 
 if __name__ == "__main__":
