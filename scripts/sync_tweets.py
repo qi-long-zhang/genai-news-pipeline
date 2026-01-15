@@ -82,6 +82,8 @@ def extract_tweet_fields(tweet):
         "cover_image": cover_image,
         # News article link
         "article_url": article_url,
+        # News source
+        "source": tweet.get("author", {}).get("name"),
     }
 
 
@@ -298,7 +300,6 @@ def ingest_fresh_tweets():
 
         for tweet in filtered_tweets:
             processed_tweet = extract_tweet_fields(tweet)
-            processed_tweet["source_account"] = TARGET_ACCOUNT
             processed_tweet["needs_update"] = until_time - processed_tweet[
                 "created_at"
             ] <= timedelta(days=7)  # Mark for update if within 7 days
