@@ -12,10 +12,10 @@ load_dotenv()
 
 # Configuration
 API_KEY = os.getenv("API_KEY")
-TARGET_ACCOUNTS = os.getenv("TARGET_ACCOUNTS", "").split(",")
+TARGET_ACCOUNTS = os.getenv("TARGET_ACCOUNTS").split(",")
 MONGO_URI = os.getenv("MONGO_URI")
 MONGO_DATABASE = os.getenv("MONGO_DATABASE")
-MONGO_COLLECTIONS = os.getenv("MONGO_COLLECTIONS", "").split(",")
+MONGO_COLLECTIONS = os.getenv("MONGO_COLLECTIONS").split(",")
 
 retries = Retry(
     total=3,
@@ -315,7 +315,10 @@ def ingest_fresh_tweets(target_account, mongo_collection):
 
             # Account specific filtering
             if target_account == "straits_times":
-                if processed_tweet.get("article_url") == "https://www.straitstimes.com/":
+                if (
+                    processed_tweet.get("article_url")
+                    == "https://www.straitstimes.com/"
+                ):
                     continue
                 if processed_tweet.get("cover_image") is None:
                     continue

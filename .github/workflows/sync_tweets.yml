@@ -10,10 +10,10 @@ jobs:
     runs-on: ubuntu-latest
     env:
       API_KEY: ${{ secrets.API_KEY }}
-      TARGET_ACCOUNT: ${{ secrets.TARGET_ACCOUNT }}
+      TARGET_ACCOUNT: ${{ secrets.TARGET_ACCOUNTS }}
       MONGO_URI: ${{ secrets.MONGO_URI }}
       MONGO_DATABASE: ${{ secrets.MONGO_DATABASE }}
-      MONGO_COLLECTION: ${{ secrets.MONGO_COLLECTION }}
+      MONGO_COLLECTION: ${{ secrets.MONGO_COLLECTIONS }}
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
