@@ -100,4 +100,3 @@ LOG_LEVEL = "INFO"
 # MongoDB configuration
 MONGO_URI = os.getenv("MONGO_URI")
 MONGO_DATABASE = os.getenv("MONGO_DATABASE")
-MONGO_COLLECTION = os.getenv("MONGO_COLLECTION")
