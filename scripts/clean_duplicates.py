@@ -27,17 +27,14 @@ def remove_duplicates_in_collection(db, collection_name):
     deleted_count = 0
     for group in duplicates:
         docs = group["docs"]
-        
+
         # Sort by created_at descending (newest first)
         # Use datetime.min as default if created_at is missing/None
-        docs.sort(
-            key=lambda x: x.get("created_at") or datetime.min, 
-            reverse=True
-        )
+        docs.sort(key=lambda x: x.get("created_at") or datetime.min, reverse=True)
 
         # Keep the first one (newest), delete the rest
         to_delete = [doc["_id"] for doc in docs[1:]]
-        
+
         if to_delete:
             result = collection.delete_many({"_id": {"$in": to_delete}})
             deleted_count += result.deleted_count
@@ -47,11 +44,11 @@ def remove_duplicates_in_collection(db, collection_name):
 
 def main():
     load_dotenv()
-    
+
     mongo_uri = os.getenv("MONGO_URI")
-    mongo_db_name = os.getenv("MONGO_DATABASE")     
+    mongo_db_name = os.getenv("MONGO_DATABASE")
     mongo_collections = os.getenv("MONGO_COLLECTIONS").split(",")
-    
+
     if not mongo_collections:
         print("No collections to process.")
         return

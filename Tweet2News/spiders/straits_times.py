@@ -1,7 +1,6 @@
 import scrapy
 from dateutil import parser
 from pymongo import MongoClient
-from urllib.parse import urljoin
 
 from Tweet2News.items import NewsArticleItem
 
@@ -32,7 +31,7 @@ class StraitsTimesSpider(scrapy.Spider):
 
     def parse(self, response):
         def _clean(value):
-            return value.replace('\xa0', ' ').strip() if value else None
+            return value.replace("\xa0", " ").strip() if value else None
 
         def _parse_date(date_str):
             if not date_str:
@@ -57,17 +56,21 @@ class StraitsTimesSpider(scrapy.Spider):
         for element in timestamp_elements:
             raw_text = "".join(element.css("p::text").getall())
             if "Published" in raw_text:
-                item["publish_date"] = _parse_date(_clean(raw_text.replace("Published", "")))
+                item["publish_date"] = _parse_date(
+                    _clean(raw_text.replace("Published", ""))
+                )
             elif "Updated" in raw_text:
-                item["update_date"] = _parse_date(_clean(raw_text.replace("Updated", "")))
+                item["update_date"] = _parse_date(
+                    _clean(raw_text.replace("Updated", ""))
+                )
 
         summary_container = response.css('div[data-testid="aisummary-test-id"]')
         if summary_container:
-            raw_bullets = summary_container.css('li').xpath('string(.)').getall()
+            raw_bullets = summary_container.css("li").xpath("string(.)").getall()
             summary_list = [_clean(t) for t in raw_bullets if _clean(t)]
-            item['summary'] = summary_list if summary_list else None
+            item["summary"] = summary_list if summary_list else None
         else:
-            item['summary'] = None
+            item["summary"] = None
 
         content_nodes = response.css(
             'p[data-testid="article-paragraph-annotation-test-id"], '
@@ -76,7 +79,7 @@ class StraitsTimesSpider(scrapy.Spider):
         content = []
         for node in content_nodes:
             tag = node.xpath("name()").get()
-            text = _clean(node.xpath('string(.)').get())
+            text = _clean(node.xpath("string(.)").get())
             if text:
                 content.append({"tag": tag, "text": text})
         item["content"] = content
@@ -87,48 +90,60 @@ class StraitsTimesSpider(scrapy.Spider):
             'figure[data-testid="inline-media-test-id"]'
         )
         for node in image_nodes:
-            img_url = _clean(node.css('img::attr(src)').get())
+            img_url = _clean(
+                node.css("source::attr(srcset)").get()
+                or node.css("img::attr(src)").get()
+            )
             if not img_url:
                 continue
-            
+
+            img_url = img_url.split(" ")[0]
+            if "?" in img_url:
+                img_url = img_url.split("?")[0]
+
             caption_list = []
-            for cap in node.css('.hero-media-caption p, figcaption, figcaption p'):
-                text = _clean(cap.xpath('string(.)').get())
-                if text: 
+            for cap in node.css(".hero-media-caption p, figcaption p"):
+                text = _clean(cap.xpath("string(.)").get())
+                if text:
                     caption_list.append(text)
-            
+
             images.append({"url": img_url, "caption": caption_list})
-        item['images'] = images
+        item["images"] = images
 
         videos = []
-        video_frames = response.css('div[data-testid="social-media-embed-test-id"] iframe')
+        video_frames = response.css(
+            'div[data-testid="social-media-embed-test-id"] iframe'
+        )
         for frame in video_frames:
-            src = _clean(frame.css('::attr(src)').get())
+            src = _clean(frame.css("::attr(src)").get())
             if src and ("youtube.com" in src or "youtu.be" in src):
                 videos.append(src)
-        item['videos'] = videos
+        item["videos"] = videos
 
         links = []
         link_nodes = response.css(
             'p[data-testid="article-paragraph-annotation-test-id"] a[href], '
             'h2[data-testid="article-subhead-test-id"] a[href]'
         )
-        excluded_substrings = ["newsletter-signup", "headstart-signup", "ref=inline-article"]
+        excluded_substrings = ["newsletter-signup", "headstart-signup"]
         for node in link_nodes:
             url = _clean(node.css("::attr(href)").get())
             text = _clean(node.xpath("string(.)").get())
-            if not url or any(ex in url for ex in excluded_substrings): continue
-            
+            if not url or any(ex in url for ex in excluded_substrings):
+                continue
+
             is_internal = url.startswith("/") or self.allowed_domains[0] in url
             links.append({"url": url, "text": text, "is_internal": is_internal})
-        item['links'] = links
+        item["links"] = links
 
         topics = []
-        topic_nodes = response.css('div[data-testid="tags-test-id"] button[data-testid="button-test-id"]')
+        topic_nodes = response.css(
+            'div[data-testid="tags-test-id"] button[data-testid="button-test-id"]'
+        )
         for node in topic_nodes:
-            topic_text = _clean(node.xpath('string(.)').get())
+            topic_text = _clean(node.xpath("string(.)").get())
             if topic_text:
                 topics.append(topic_text)
-        item['topics'] = topics
+        item["topics"] = topics
 
         yield item

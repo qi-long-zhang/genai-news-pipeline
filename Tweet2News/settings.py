@@ -95,7 +95,7 @@ ITEM_PIPELINES = {
 # Set settings whose default value is deprecated to a future-proof value
 FEED_EXPORT_ENCODING = "utf-8"
 
-LOG_LEVEL = "INFO"
+LOG_LEVEL = "WARNING"
 
 # MongoDB configuration
 MONGO_URI = os.getenv("MONGO_URI")
