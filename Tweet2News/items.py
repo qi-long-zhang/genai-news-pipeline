@@ -26,6 +26,7 @@ class NewsArticleItem(scrapy.Item):
 
     # Structured data
     tags = scrapy.Field()
+    topics = scrapy.Field()
     images = scrapy.Field()
     videos = scrapy.Field()
     links = scrapy.Field()
