@@ -340,6 +340,20 @@ def ingest_fresh_tweets(target_account, mongo_collection):
             client.close()
             return
 
+        # Deduplicate within the current batch based on article_url
+        # Keep the first occurrence (which is the newest due to API order)
+        seen_urls = set()
+        unique_processed_tweets = []
+        for tweet in processed_tweets:
+            url = tweet.get("article_url")
+            if url:
+                if url in seen_urls:
+                    continue
+                seen_urls.add(url)
+            unique_processed_tweets.append(tweet)
+        
+        processed_tweets = unique_processed_tweets
+
         # Deduplicate based on article_url:
         # If a tweet in the new batch has an article_url that already exists in the DB,
         # delete the existing document(s) in the DB to allow the new one to take precedence.
