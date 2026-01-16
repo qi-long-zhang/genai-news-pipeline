@@ -11,7 +11,7 @@ jobs:
     env:
       MONGO_URI: ${{ secrets.MONGO_URI }}
       MONGO_DATABASE: ${{ secrets.MONGO_DATABASE }}
-      MONGO_COLLECTION: ${{ secrets.MONGO_COLLECTION }}
+      MONGO_COLLECTIONS: ${{ secrets.MONGO_COLLECTIONS }}
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
@@ -23,6 +23,9 @@ jobs:
 
       - name: Install dependencies
         run: pip install -r requirements.txt
+
+      - name: Clean duplicates
+        run: python scripts/clean_duplicates.py
 
       - name: Run spiders
         run: python scripts/run_spiders.py

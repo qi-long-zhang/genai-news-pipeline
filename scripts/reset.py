@@ -1,6 +1,7 @@
 import os
 from pymongo import MongoClient
 from dotenv import load_dotenv
+from datetime import datetime
 
 
 def main():
@@ -8,20 +9,44 @@ def main():
     uri = os.getenv("MONGO_URI")
     client = MongoClient(uri)
     db = client[os.getenv("MONGO_DATABASE")]
-    collection = db[os.getenv("MONGO_COLLECTION")]
+    collection = db["straits_times"]
 
-    print("开始更新...")
+    print("开始清理重复数据...")
 
-    # 逻辑：
-    # 1. 筛选：只找有 source_account 的文档
-    # 2. 修改：设置 source 为 "Mothership"
-    # 3. 删除：删除 source_account 字段
-    result = collection.update_many(
-        {"source_account": {"$exists": True}},
-        {"$set": {"source": "Mothership"}, "$unset": {"source_account": ""}},
-    )
+    # Aggregation pipeline to find duplicates
+    pipeline = [
+        {"$match": {"article_url": {"$exists": True, "$ne": None}}},
+        {
+            "$group": {
+                "_id": "$article_url",
+                "count": {"$sum": 1},
+                "docs": {"$push": {"_id": "$_id", "created_at": "$created_at"}},
+            }
+        },
+        {"$match": {"count": {"$gt": 1}}},
+    ]
 
-    print(f"匹配数量: {result.matched_count}, 修改数量: {result.modified_count}")
+    duplicates = list(collection.aggregate(pipeline))
+    print(f"发现 {len(duplicates)} 组重复的 article_url")
+
+    deleted_count = 0
+    for group in duplicates:
+        docs = group["docs"]
+        # Sort by created_at descending (newest first)
+        # Note: created_at might be None or missing, so we need to handle that safely.
+        # Assuming created_at is a datetime object or comparable.
+        docs.sort(
+            key=lambda x: x.get("created_at") or datetime.min, reverse=True
+        )
+
+        # Keep the first one (newest), delete the rest
+        to_delete = [doc["_id"] for doc in docs[1:]]
+        
+        if to_delete:
+            result = collection.delete_many({"_id": {"$in": to_delete}})
+            deleted_count += result.deleted_count
+
+    print(f"清理完成。共删除了 {deleted_count} 个重复文档。")
     client.close()
 
 
