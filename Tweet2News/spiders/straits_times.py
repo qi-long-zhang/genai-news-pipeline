@@ -91,22 +91,23 @@ class StraitsTimesSpider(scrapy.Spider):
         )
         for node in image_nodes:
             img_url = _clean(
-                node.css("source::attr(srcset)").get()
-                or node.css("img::attr(src)").get()
+                (
+                    node.css("img::attr(src)").get()
+                    or (
+                        response.css('meta[property="og:image"]::attr(content)').get()
+                        if node.attrib.get("data-testid")
+                        == "article-hero-media-test-id"
+                        else None
+                    )
+                )
             )
             if not img_url:
                 continue
-
-            img_url = img_url.split(" ")[0]
-            if "?" in img_url:
-                img_url = img_url.split("?")[0]
-
             caption_list = []
             for cap in node.css(".hero-media-caption p, figcaption p"):
                 text = _clean(cap.xpath("string(.)").get())
                 if text:
                     caption_list.append(text)
-
             images.append({"url": img_url, "caption": caption_list})
         item["images"] = images
 
@@ -127,13 +128,13 @@ class StraitsTimesSpider(scrapy.Spider):
         )
         excluded_substrings = ["newsletter-signup", "headstart-signup"]
         for node in link_nodes:
-            url = _clean(node.css("::attr(href)").get())
+            raw_url = _clean(node.css("::attr(href)").get())
             text = _clean(node.xpath("string(.)").get())
-            if not url or any(ex in url for ex in excluded_substrings):
+            if not raw_url or any(ex in raw_url for ex in excluded_substrings):
                 continue
-
-            is_internal = url.startswith("/") or self.allowed_domains[0] in url
-            links.append({"url": url, "text": text, "is_internal": is_internal})
+            clean_url = response.urljoin(raw_url.split("?")[0])
+            is_internal = self.allowed_domains[0] in clean_url
+            links.append({"url": clean_url, "text": text, "is_internal": is_internal})
         item["links"] = links
 
         topics = []
