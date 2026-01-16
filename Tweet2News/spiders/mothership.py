@@ -102,6 +102,8 @@ class MothershipSpider(scrapy.Spider):
             link_text = _clean(link_node.css("::text").get())
             if not link_url or link_url in excluded_links:
                 continue
+            if "email-protection" in link_url or "[email" in (link_text or ""):
+                continue
             is_internal = (
                 link_url.startswith("/") or self.allowed_domains[0] in link_url
             )
