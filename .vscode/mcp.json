@@ -9,7 +9,7 @@
         "--readOnly"
       ],
       "env": {
-        "MDB_MCP_CONNECTION_STRING": "$MONGO_URI",
+        "MDB_MCP_CONNECTION_STRING": "${env:MONGO_URI}"
       }
     }
   }
