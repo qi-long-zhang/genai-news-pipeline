@@ -63,7 +63,7 @@ class CloudScraperMiddleware:
     def __init__(self) -> None:
         self.scraper = cloudscraper.create_scraper()
 
-    def process_request(self, request, spider):
+    def process_request(self, request):
         if not request.meta.get("cloudscraper"):
             return None
 
