@@ -1,0 +1,16 @@
+{
+  "servers": {
+    "MongoDB": {
+      "type": "stdio",
+      "command": "npx",
+      "args": [
+        "-y",
+        "mongodb-mcp-server@latest",
+        "--readOnly"
+      ],
+      "env": {
+        "MDB_MCP_CONNECTION_STRING": "$MONGO_URI",
+      }
+    }
+  }
+}
