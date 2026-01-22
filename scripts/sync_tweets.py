@@ -325,6 +325,14 @@ def ingest_fresh_tweets(target_account, mongo_collection):
                     == "https://www.straitstimes.com/global"
                 ):
                     continue
+                if (processed_tweet.get("article_url") or "").startswith(
+                    "https://www.straitstimes.com/multimedia"
+                ):
+                    continue
+                if (processed_tweet.get("article_url") or "").startswith(
+                    "https://www.straitstimes.com/newsletter"
+                ):
+                    continue
                 if processed_tweet.get("cover_image") is None:
                     continue
 
