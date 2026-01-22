@@ -3,6 +3,7 @@
 # Don't forget to add your pipeline to the ITEM_PIPELINES setting
 # See: https://docs.scrapy.org/en/latest/topics/item-pipeline.html
 
+import re
 from datetime import datetime, timezone
 
 from itemadapter import ItemAdapter
@@ -16,10 +17,18 @@ class MongoPipeline:
     `mongo_collection`.
     """
 
-    SPECIAL_WHITESPACE = ("\xa0", "\u202f", "\u200b")
-    TRANSLATION = str.maketrans({"\xa0": " ", "\u202f": " ", "\u200b": ""})
+    TRANSLATION = str.maketrans({
+        "\xa0": " ",      # non-breaking space
+        "\u202f": " ",    # narrow no-break space
+        "\u200b": "",     # zero-width space
+        "\u200c": "",     # zero-width non-joiner
+        "\u200d": "",     # zero-width joiner
+        "\u00ad": "",     # soft hyphen
+    })
+    MULTI_SPACE = re.compile(r" {2,}")
 
-    def __init__(self, mongo_uri, mongo_db, bulk_size=50):
+    def __init__(self, crawler, mongo_uri, mongo_db, bulk_size=50):
+        self.crawler = crawler
         self.mongo_uri = mongo_uri
         self.mongo_db = mongo_db
         self.bulk_size = max(1, bulk_size)
@@ -27,14 +36,16 @@ class MongoPipeline:
     @classmethod
     def from_crawler(cls, crawler):
         return cls(
+            crawler=crawler,
             mongo_uri=crawler.settings.get("MONGO_URI"),
             mongo_db=crawler.settings.get("MONGO_DATABASE"),
         )
 
-    def open_spider(self, spider):
+    def open_spider(self):
         if not self.mongo_uri or not self.mongo_db:
             raise RuntimeError("Mongo connection settings are required.")
 
+        spider = self.crawler.spider
         collection_name = getattr(spider, "mongo_collection", spider.name)
         self.client = MongoClient(self.mongo_uri)
         self.collection = self.client[self.mongo_db][collection_name]
@@ -97,8 +108,8 @@ class MongoPipeline:
 
     def _clean_value(self, value):
         if isinstance(value, str):
-            if any(char in value for char in self.SPECIAL_WHITESPACE):
-                value = value.translate(self.TRANSLATION)
+            value = value.translate(self.TRANSLATION)
+            value = self.MULTI_SPACE.sub(" ", value)
             return value.strip()
 
         if isinstance(value, list):
