@@ -171,9 +171,9 @@ class ChannelNewsAsiaSpider(scrapy.Spider):
         item["links"] = links
 
         embeds = []
-        embed_nodes = content_section.css("iframe[src*='instagram.com']")
+        embed_nodes = content_section.css("blockquote.instagram-media")
         for embed_node in embed_nodes:
-            embed_url = _clean(embed_node.css("::attr(src)").get())
+            embed_url = _clean(embed_node.css("::attr(data-instgrm-permalink)").get())
             if embed_url:
                 embeds.append(embed_url)
         item["embeds"] = embeds
