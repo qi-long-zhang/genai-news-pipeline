@@ -164,7 +164,9 @@ class ChannelNewsAsiaSpider(scrapy.Spider):
                     continue
                 clean_url = response.urljoin(raw_url.split("?")[0])
                 is_internal = self.allowed_domains[0] in clean_url
-            links.append({"url": clean_url, "text": text, "is_internal": is_internal})
+                links.append(
+                    {"url": clean_url, "text": text, "is_internal": is_internal}
+                )
         item["links"] = links
 
         embeds = []
