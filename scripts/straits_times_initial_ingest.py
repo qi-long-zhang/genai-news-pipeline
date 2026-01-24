@@ -148,7 +148,10 @@ def save_initial_tweets():
 
                 if processed_tweet.get("cover_image") is not None:
                     # Filter out tweets where article_url is just the homepage
-                    if processed_tweet.get("article_url") == "https://www.straitstimes.com/":
+                    if (
+                        processed_tweet.get("article_url")
+                        == "https://www.straitstimes.com/"
+                    ):
                         continue
 
                     processed_tweet["needs_update"] = False

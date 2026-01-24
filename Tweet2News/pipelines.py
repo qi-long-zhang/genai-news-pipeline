@@ -18,14 +18,16 @@ class MongoPipeline:
     `mongo_collection`.
     """
 
-    TRANSLATION = str.maketrans({
-        "\xa0": " ",      # non-breaking space
-        "\u202f": " ",    # narrow no-break space
-        "\u200b": "",     # zero-width space
-        "\u200c": "",     # zero-width non-joiner
-        "\u200d": "",     # zero-width joiner
-        "\u00ad": "",     # soft hyphen
-    })
+    TRANSLATION = str.maketrans(
+        {
+            "\xa0": " ",  # non-breaking space
+            "\u202f": " ",  # narrow no-break space
+            "\u200b": "",  # zero-width space
+            "\u200c": "",  # zero-width non-joiner
+            "\u200d": "",  # zero-width joiner
+            "\u00ad": "",  # soft hyphen
+        }
+    )
     MULTI_SPACE = re.compile(r" {2,}")
 
     def __init__(self, crawler, mongo_uri, mongo_db, bulk_size=50):

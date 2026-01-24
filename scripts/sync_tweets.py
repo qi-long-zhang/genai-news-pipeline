@@ -359,7 +359,7 @@ def ingest_fresh_tweets(target_account, mongo_collection):
                     continue
                 seen_urls.add(url)
             unique_processed_tweets.append(tweet)
-        
+
         processed_tweets = unique_processed_tweets
 
         # Deduplicate based on article_url:
