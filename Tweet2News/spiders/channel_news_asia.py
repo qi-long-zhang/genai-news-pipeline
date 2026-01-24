@@ -1,0 +1,170 @@
+import json
+import logging
+from datetime import datetime, timedelta, timezone
+
+import scrapy
+from dateutil import parser
+from pymongo import MongoClient
+from w3lib.html import remove_tags, replace_entities
+
+from Tweet2News.items import NewsArticleItem
+
+
+class ChannelNewsAsiaSpider(scrapy.Spider):
+    name = "channel_news_asia"
+    allowed_domains = ["channelnewsasia.com"]
+
+    async def start(self):
+        mongo_uri = self.settings.get("MONGO_URI")
+        mongo_db = self.settings.get("MONGO_DATABASE")
+        mongo_collection = self.name
+
+        self.page = 0
+        self.cutoff_date = datetime.now(timezone.utc) - timedelta(days=7)
+        self.existing_articles = {}
+
+        with MongoClient(mongo_uri) as client:
+            collection = client[mongo_db][mongo_collection]
+            cursor = collection.find(
+                {"publish_date": {"$gte": self.cutoff_date}},
+                projection={"_id": 1, "update_date": 1},
+            )
+            for doc in cursor:
+                u_date = doc.get("update_date")
+                if u_date:
+                    self.existing_articles[doc["_id"]] = u_date
+
+        yield scrapy.Request(
+            f"https://www.channelnewsasia.com/api/v1/infinitelisting/424d200d-65b8-46e8-95f6-164946a38f8c?_format=json&viewMode=infinite_scroll_listing&page={self.page}"
+        )
+
+    def parse(self, response):
+        def _clean(value):
+            return value.strip() if value else None
+
+        def _parse_date(date_str):
+            if not date_str:
+                return None
+            return parser.parse(date_str)
+
+        data = json.loads(response.text)
+
+        articles = data.get("result") or []
+        if not articles:
+            logging.warning("No Channel News Asia articles returned; stopping crawl")
+            return
+
+        for article in articles:
+            if article.get("type") != "article":
+                continue
+
+            date = _parse_date(article.get("date"))
+            if date and date < self.cutoff_date:
+                return
+
+            article_id = article.get("uuid")
+            if article_id in self.existing_articles:
+                existing_update_date = self.existing_articles[article_id]
+                if date == existing_update_date:
+                    continue
+
+            item = NewsArticleItem()
+            item["_id"] = article_id
+            item["article_url"] = article.get("absolute_url")
+
+            item["title"] = article.get("title")
+            description = article.get("description", "")
+            item["subtitle"] = _clean(remove_tags(replace_entities(description)))
+            summary = article.get("fast", {}).get("tldr_for_shorts", [])
+            if summary:
+                selector = scrapy.Selector(text=summary)
+                summary_list = selector.css("li::text").getall()
+                item["summary"] = [_clean(t) for t in summary_list if _clean(t)]
+            item["author"] = _clean(article.get("author"))
+            item["cover_image"] = article.get("img_extra", {}).get("original")
+
+            yield scrapy.Request(
+                item["article_url"],
+                self.parse_article,
+                meta={"cloudscraper": True, "item": item},
+            )
+
+        next_page = self.page + 1
+        next_url = response.url.replace(f"page={self.page}", f"page={next_page}")
+        self.page = next_page
+        yield scrapy.Request(next_url, self.parse)
+
+    def parse_article(self, response):
+        def _clean(value):
+            return value.strip() if value else None
+
+        def _parse_date(date_str):
+            if not date_str:
+                return None
+            return parser.parse(date_str)
+
+        item = response.meta["item"]
+
+        content_section = response.css("div.content")
+
+        article_publish = content_section.css(".article-publish")
+        publish_date = article_publish.css("::text").get()
+        item["publish_date"] = _parse_date(_clean(publish_date))
+        update_date = article_publish.css("span::text").get()
+        item["update_date"] = (
+            _parse_date(_clean(update_date.replace("(Updated:", "").replace(")", "")))
+            or item["publish_date"]
+        )
+
+        content = []
+        content_nodes = content_section.xpath(
+            "//*[@class='text-long']/h2 | //*[@class='text-long']/p"
+        )
+        for node in content_nodes:
+            tag = node.root.tag
+            all_texts = node.xpath(".//text()").getall()
+            text = _clean(" ".join(t.strip() for t in all_texts if t.strip()))
+            if text:
+                content.append({"type": tag, "text": text})
+        item["content"] = content
+
+        images = []
+        image_nodes = content_section.css("figure")
+        for img_node in image_nodes:
+            img_url = _clean(img_node.css("img::attr(src)").get())
+            caption = _clean(img_node.xpath("normalize-space(.//figcaption)").get())
+            if img_url:
+                images.append({"url": img_url, "caption": caption})
+        item["images"] = images
+
+        videos = []
+        video_nodes = content_section.css(
+            "iframe[src*='youtube.com'], iframe[src*='youtu.be']"
+        )
+        for vid_node in video_nodes:
+            vid_url = _clean(vid_node.css("::attr(src)").get())
+            if vid_url:
+                videos.append(vid_url)
+        item["videos"] = videos
+
+        item["source"] = "CNA"
+        source = _clean(content_section.css(".source.source--with-label::text").get())
+        if source:
+            item["source"] = _clean(source.replace("Source:", ""))
+
+        links = []
+        link_nodes = content_section.css(".text-long h2 a, .text-long p a")
+        for node in link_nodes:
+            raw_url = _clean(node.css("::attr(href)").get())
+            text = _clean(node.xpath("string(.)").get())
+            if not raw_url or raw_url.startswith("javascript:"):
+                continue
+            clean_url = response.urljoin(raw_url.split("?")[0])
+            is_internal = self.allowed_domains[0] in clean_url
+            links.append({"url": clean_url, "text": text, "is_internal": is_internal})
+        item["links"] = links
+
+        topics = content_section.css("[data-title='Related Topics'] a::text").getall()
+        item["topics"] = [_clean(t) for t in topics if _clean(t)]
+
+        yield item

@@ -12,11 +12,13 @@ class NewsArticleItem(scrapy.Item):
     # Primary reference back to the tweet document
     _id = scrapy.Field()
     article_url = scrapy.Field()
+    source = scrapy.Field()
 
     # Article metadata
     title = scrapy.Field()
     subtitle = scrapy.Field()
     summary = scrapy.Field()
+    cover_image = scrapy.Field()
     author = scrapy.Field()
     publish_date = scrapy.Field()
     update_date = scrapy.Field()
