@@ -99,8 +99,7 @@ class MongoPipeline:
             modified = result.modified_count
             matched = result.matched_count
             self.logger.warning(
-                "[%s] MongoPipeline bulk_write: matched=%s modified=%s upserted=%s",
-                self.crawler.spider.name,
+                "MongoPipeline bulk_write: matched=%s modified=%s upserted=%s",
                 matched,
                 modified,
                 inserted,

@@ -50,9 +50,6 @@ class ChannelNewsAsiaSpider(scrapy.Spider):
 
         articles = data.get("result") or []
         if not articles:
-            self.logger.warning(
-                "No Channel News Asia articles returned; stopping crawl"
-            )
             return
 
         for article in articles:
