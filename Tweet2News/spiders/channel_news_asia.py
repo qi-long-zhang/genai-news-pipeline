@@ -111,14 +111,13 @@ class ChannelNewsAsiaSpider(scrapy.Spider):
         article_publish = content_section.css(".article-publish")
         publish_date = article_publish.css("::text").get()
         item["publish_date"] = _parse_date(_clean(publish_date))
+        item["update_date"] = item["publish_date"]
         update_date = article_publish.css("span::text").get()
         if update_date:
             cleaned_update_date = _clean(
                 update_date.replace("(Updated:", "").replace(")", "")
             )
             item["update_date"] = _parse_date(cleaned_update_date)
-        else:
-            item["update_date"] = item["publish_date"]
 
         content = []
         content_nodes = content_section.xpath(
