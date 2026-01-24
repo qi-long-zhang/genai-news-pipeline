@@ -1,5 +1,4 @@
 import json
-import logging
 from datetime import datetime, timedelta, timezone
 
 import scrapy
@@ -51,7 +50,9 @@ class ChannelNewsAsiaSpider(scrapy.Spider):
 
         articles = data.get("result") or []
         if not articles:
-            logging.warning("No Channel News Asia articles returned; stopping crawl")
+            self.logger.warning(
+                "No Channel News Asia articles returned; stopping crawl"
+            )
             return
 
         for article in articles:
