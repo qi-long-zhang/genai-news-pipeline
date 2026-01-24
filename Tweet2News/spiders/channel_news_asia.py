@@ -118,8 +118,8 @@ class ChannelNewsAsiaSpider(scrapy.Spider):
 
         content = []
         content_nodes = content_section.xpath(
-            ".//div[contains(@class, 'content-detail__description')]/h2 | "
-            ".//div[contains(@class, 'content-detail__description')]/p | "
+            ".//div[contains(@class, 'content-detail__description') and not(ancestor::div[contains(@class, 'context-snippet')]) ]/h2 | "
+            ".//div[contains(@class, 'content-detail__description') and not(ancestor::div[contains(@class, 'context-snippet')]) ]/p | "
             ".//*[contains(@class, 'text-long') and not(ancestor::div[contains(@class, 'context-snippet')])]/h2 | "
             ".//*[contains(@class, 'text-long') and not(ancestor::div[contains(@class, 'context-snippet')])]/p"
         )
@@ -157,8 +157,8 @@ class ChannelNewsAsiaSpider(scrapy.Spider):
 
         links = []
         link_nodes = content_section.xpath(
-            ".//div[contains(@class, 'content-detail__description')]/h2//a | "
-            ".//div[contains(@class, 'content-detail__description')]/p//a | "
+            ".//div[contains(@class, 'content-detail__description') and not(ancestor::div[contains(@class, 'context-snippet')])]/h2//a | "
+            ".//div[contains(@class, 'content-detail__description') and not(ancestor::div[contains(@class, 'context-snippet')])]/p//a | "
             ".//*[contains(@class, 'text-long') and not(ancestor::div[contains(@class, 'context-snippet')])]/h2//a | "
             ".//*[contains(@class, 'text-long') and not(ancestor::div[contains(@class, 'context-snippet')])]/p//a"
         )
