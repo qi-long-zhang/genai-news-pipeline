@@ -122,6 +122,7 @@ class ChannelNewsAsiaSpider(scrapy.Spider):
             "self::div[contains(@class, 'text-long')]]"
             "//*[self::p or self::h2 or self::li or self::blockquote]"
             "[not(ancestor::div[contains(@class, 'context-snippet')])]"
+            "[not(ancestor::div[contains(@class, 'title-block')])]"
         )
         for node in content_nodes:
             tag = node.root.tag
