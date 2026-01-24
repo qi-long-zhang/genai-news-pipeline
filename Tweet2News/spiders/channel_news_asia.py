@@ -118,15 +118,14 @@ class ChannelNewsAsiaSpider(scrapy.Spider):
 
         content = []
         content_nodes = content_section.xpath(
-            ".//div[contains(@class, 'content-detail__description') and not(ancestor::div[contains(@class, 'context-snippet')]) ]/h2 | "
-            ".//div[contains(@class, 'content-detail__description') and not(ancestor::div[contains(@class, 'context-snippet')]) ]/p | "
-            ".//*[contains(@class, 'text-long') and not(ancestor::div[contains(@class, 'context-snippet')])]/h2 | "
-            ".//*[contains(@class, 'text-long') and not(ancestor::div[contains(@class, 'context-snippet')])]/p"
+            ".//*[self::div[contains(@class, 'content-detail__description')] or "
+            "self::div[contains(@class, 'text-long')]]"
+            "//*[self::p or self::h2 or self::li or self::blockquote]"
+            "[not(ancestor::div[contains(@class, 'context-snippet')])]"
         )
         for node in content_nodes:
             tag = node.root.tag
-            all_texts = node.xpath(".//text()").getall()
-            text = _clean(" ".join(t.strip() for t in all_texts if t.strip()))
+            text = _clean(node.xpath("string(.)").get())
             if text:
                 content.append({"type": tag, "text": text})
         item["content"] = content
@@ -156,19 +155,15 @@ class ChannelNewsAsiaSpider(scrapy.Spider):
             item["source"] = _clean(source.replace("Source:", ""))
 
         links = []
-        link_nodes = content_section.xpath(
-            ".//div[contains(@class, 'content-detail__description') and not(ancestor::div[contains(@class, 'context-snippet')])]/h2//a | "
-            ".//div[contains(@class, 'content-detail__description') and not(ancestor::div[contains(@class, 'context-snippet')])]/p//a | "
-            ".//*[contains(@class, 'text-long') and not(ancestor::div[contains(@class, 'context-snippet')])]/h2//a | "
-            ".//*[contains(@class, 'text-long') and not(ancestor::div[contains(@class, 'context-snippet')])]/p//a"
-        )
-        for node in link_nodes:
-            raw_url = _clean(node.css("::attr(href)").get())
-            text = _clean(node.xpath("string(.)").get())
-            if not raw_url or raw_url.startswith("javascript:"):
-                continue
-            clean_url = response.urljoin(raw_url.split("?")[0])
-            is_internal = self.allowed_domains[0] in clean_url
+        for node in content_nodes:
+            a_nodes = node.css("a")
+            for a_node in a_nodes:
+                raw_url = _clean(a_node.css("::attr(href)").get())
+                text = _clean(a_node.xpath("string(.)").get())
+                if not raw_url or raw_url.startswith(("javascript:", "mailto:", "#")):
+                    continue
+                clean_url = response.urljoin(raw_url.split("?")[0])
+                is_internal = self.allowed_domains[0] in clean_url
             links.append({"url": clean_url, "text": text, "is_internal": is_internal})
         item["links"] = links
 
