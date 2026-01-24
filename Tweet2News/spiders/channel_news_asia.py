@@ -141,13 +141,24 @@ class ChannelNewsAsiaSpider(scrapy.Spider):
         item["images"] = images
 
         videos = []
-        video_nodes = content_section.css(
+        youtube_nodes = content_section.css(
             "iframe[src*='youtube.com'], iframe[src*='youtu.be']"
         )
-        for vid_node in video_nodes:
+        for vid_node in youtube_nodes:
             vid_url = _clean(vid_node.css("::attr(src)").get())
             if vid_url:
                 videos.append(vid_url)
+        brightcove_nodes = content_section.css("video-js")
+        for bc_node in brightcove_nodes:
+            data_account = _clean(bc_node.css("::attr(data-account)").get())
+            data_player = _clean(bc_node.css("::attr(data-player)").get())
+            data_video_id = _clean(bc_node.css("::attr(data-video-id)").get())
+            if data_account and data_player and data_video_id:
+                bc_url = (
+                    f"https://players.brightcove.net/{data_account}/"
+                    f"{data_player}_default/index.html?videoId={data_video_id}"
+                )
+                videos.append(bc_url)
         item["videos"] = videos
 
         item["source"] = "CNA"
