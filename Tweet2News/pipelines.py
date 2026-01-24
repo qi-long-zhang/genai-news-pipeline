@@ -81,6 +81,7 @@ class MongoPipeline:
                     "needs_scraping": False,
                 }
             },
+            upsert=True,
         )
         self._operations.append(update)
 
