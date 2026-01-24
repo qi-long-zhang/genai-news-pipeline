@@ -4,6 +4,7 @@
 # See: https://docs.scrapy.org/en/latest/topics/item-pipeline.html
 
 import re
+import logging
 from datetime import datetime, timezone
 
 from itemadapter import ItemAdapter
@@ -96,13 +97,13 @@ class MongoPipeline:
             inserted = result.upserted_count
             modified = result.modified_count
             matched = result.matched_count
-            if self.logger:
-                self.logger.info(
-                    "MongoPipeline bulk_write: matched=%s modified=%s upserted=%s",
-                    matched,
-                    modified,
-                    inserted,
-                )
+            logging.warning(
+                "[%s] MongoPipeline bulk_write: matched=%s modified=%s upserted=%s",
+                self.crawler.spider.name,
+                matched,
+                modified,
+                inserted,
+            )
         finally:
             self._operations = []
 
