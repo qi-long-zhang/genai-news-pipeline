@@ -118,7 +118,10 @@ class ChannelNewsAsiaSpider(scrapy.Spider):
 
         content = []
         content_nodes = content_section.xpath(
-            "//*[@class='text-long']/h2 | //*[@class='text-long']/p"
+            ".//div[contains(@class, 'content-detail__description')]/h2 | "
+            ".//div[contains(@class, 'content-detail__description')]/p | "
+            ".//*[contains(@class, 'text-long') and not(ancestor::div[contains(@class, 'context-snippet')])]/h2 | "
+            ".//*[contains(@class, 'text-long') and not(ancestor::div[contains(@class, 'context-snippet')])]/p"
         )
         for node in content_nodes:
             tag = node.root.tag
@@ -153,7 +156,12 @@ class ChannelNewsAsiaSpider(scrapy.Spider):
             item["source"] = _clean(source.replace("Source:", ""))
 
         links = []
-        link_nodes = content_section.css(".text-long h2 a, .text-long p a")
+        link_nodes = content_section.xpath(
+            ".//div[contains(@class, 'content-detail__description')]/h2//a | "
+            ".//div[contains(@class, 'content-detail__description')]/p//a | "
+            ".//*[contains(@class, 'text-long') and not(ancestor::div[contains(@class, 'context-snippet')])]/h2//a | "
+            ".//*[contains(@class, 'text-long') and not(ancestor::div[contains(@class, 'context-snippet')])]/p//a"
+        )
         for node in link_nodes:
             raw_url = _clean(node.css("::attr(href)").get())
             text = _clean(node.xpath("string(.)").get())
@@ -163,6 +171,14 @@ class ChannelNewsAsiaSpider(scrapy.Spider):
             is_internal = self.allowed_domains[0] in clean_url
             links.append({"url": clean_url, "text": text, "is_internal": is_internal})
         item["links"] = links
+
+        embeds = []
+        embed_nodes = content_section.css("iframe[src*='instagram.com']")
+        for embed_node in embed_nodes:
+            embed_url = _clean(embed_node.css("::attr(src)").get())
+            if embed_url:
+                embeds.append(embed_url)
+        item["embeds"] = embeds
 
         topics = content_section.css("[data-title='Related Topics'] a::text").getall()
         item["topics"] = [_clean(t) for t in topics if _clean(t)]
