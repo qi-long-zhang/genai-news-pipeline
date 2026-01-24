@@ -74,7 +74,7 @@ class ChannelNewsAsiaSpider(scrapy.Spider):
             item["article_url"] = article.get("absolute_url")
 
             item["title"] = article.get("title")
-            description = article.get("description", "")
+            description = article.get("description") or ""
             item["subtitle"] = _clean(remove_tags(replace_entities(description)))
             summary = article.get("fast", {}).get("tldr_for_shorts", [])
             if summary:
