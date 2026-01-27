@@ -123,6 +123,7 @@ class ChannelNewsAsiaSpider(scrapy.Spider):
             "//*[self::p or self::h2 or self::li or self::blockquote]"
             "[not(ancestor::div[contains(@class, 'context-snippet')])]"
             "[not(ancestor::div[contains(@class, 'title-block')])]"
+            "[not(ancestor::blockquote[contains(@class, 'instagram-media')])]"
         )
         for node in content_nodes:
             tag = node.root.tag
