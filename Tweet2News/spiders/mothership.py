@@ -58,7 +58,7 @@ class MothershipSpider(scrapy.Spider):
         content_section = response.css("div.content")
 
         content = []
-        text_nodes = content_section.css(":scope > h2, :scope > p, :scope > blockquote.ms-block")
+        text_nodes = content_section.css(":scope > h2, :scope > p, :scope > blockquote")
         for text_node in text_nodes:
             tag = text_node.root.tag
             all_text = text_node.xpath(".//text()[not(ancestor::figure)]").getall()
