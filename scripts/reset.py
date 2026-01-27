@@ -8,7 +8,7 @@ def main():
     uri = os.getenv("MONGO_URI")
     client = MongoClient(uri)
     db = client[os.getenv("MONGO_DATABASE")]
-    collection = db["straits_times"]
+    collection = db["mothership"]
 
     print("开始重置 needs_scraping 字段...")
 

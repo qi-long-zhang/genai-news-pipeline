@@ -65,7 +65,7 @@ class MothershipSpider(scrapy.Spider):
             tag = text_node.root.tag
             all_text = text_node.xpath(".//text()[not(ancestor::figure)]").getall()
             text = _clean(" ".join(t.strip() for t in all_text if t.strip()))
-            if tag == "h2" and text and "Related" in text:
+            if tag in {"h2", "h3"} and text and "Related" in text:
                 continue
             if text:
                 content.append({"tag": tag, "text": text})
