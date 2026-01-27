@@ -48,7 +48,7 @@ class StraitsTimesSpider(scrapy.Spider):
 
         item["author"] = _clean(
             response.css(
-                'a[data-testid="author-byline-default-byline-left"] p::text'
+                '[data-testid="masthead-author-byline-test-id"] p.font-eyebrow-lg-bold::text'
             ).get()
         )
 
