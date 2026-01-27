@@ -59,7 +59,7 @@ class MothershipSpider(scrapy.Spider):
 
         content = []
         text_nodes = content_section.css(
-            ":scope > h2, :scope > p, :scope > blockquote:not(.instagram-media)"
+            ":scope > h2, :scope > h3, :scope > p, :scope > blockquote:not(.instagram-media)"
         )
         for text_node in text_nodes:
             tag = text_node.root.tag
