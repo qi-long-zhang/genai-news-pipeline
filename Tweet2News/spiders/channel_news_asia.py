@@ -120,10 +120,9 @@ class ChannelNewsAsiaSpider(scrapy.Spider):
         content_nodes = content_section.xpath(
             ".//*[self::div[contains(@class, 'content-detail__description')] or "
             "self::div[contains(@class, 'text-long')]]"
-            "//*[self::p or self::h2 or self::li or self::blockquote]"
+            "//*[self::p or self::h2 or self::li]"
             "[not(ancestor::div[contains(@class, 'context-snippet')])]"
             "[not(ancestor::div[contains(@class, 'title-block')])]"
-            "[not(ancestor::blockquote[contains(@class, 'instagram-media')])]"
         )
         for node in content_nodes:
             tag = node.root.tag
