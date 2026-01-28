@@ -45,12 +45,16 @@ def expand_url(short_url):
     """
     if not short_url:
         return None
-    response = session.head(
-        short_url,
-        allow_redirects=True,
-        timeout=(5, 10),  # connect timeout, read timeout
-    )
-    return response.url
+    try:
+        response = session.head(
+            short_url,
+            allow_redirects=True,
+            timeout=(5, 10),  # connect timeout, read timeout
+        )
+        return response.url
+    except requests.RequestException as e:
+        print(f"Warning: Failed to expand URL {short_url}: {e}")
+        return None
 
 
 def extract_tweet_fields(tweet, target_account=None):
@@ -312,6 +316,9 @@ def ingest_fresh_tweets(target_account, mongo_collection):
                 continue
 
             processed_tweet = extract_tweet_fields(tweet, target_account)
+
+            if processed_tweet.get("article_url") is None:
+                continue
 
             # Account specific filtering
             if target_account == "straits_times":
