@@ -79,6 +79,7 @@ class MongoPipeline:
                 "$set": {
                     "article": article,
                     "needs_scraping": False,
+                    "needs_popularity_prediction": True,
                 }
             },
             upsert=True,
