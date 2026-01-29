@@ -4,5 +4,4 @@ python-dateutil>=2.8
 python-dotenv>=1.1
 requests>=2.32
 scrapy>=2.13
-transformers>=4.0
-torch>=2.0
+gradio_client>=1.0.0
