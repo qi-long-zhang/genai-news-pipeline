@@ -31,7 +31,8 @@ def format_article_for_prediction(article):
 
         if (
             "update on" not in text_0_lower
-            and "editor's note" not in text_0_lower
+            and "update at" not in text_0_lower
+            and "editor" not in text_0_lower
             and "warning:" not in text_0_lower
         ):
             lead = text_0
