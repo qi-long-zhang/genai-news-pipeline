@@ -34,6 +34,10 @@ class MongoPipeline:
         self.mongo_uri = mongo_uri
         self.mongo_db = mongo_db
         self.bulk_size = max(1, bulk_size)
+        self.client = None
+        self.collection = None
+        self.logger = None
+        self._operations = []
 
     @classmethod
     def from_crawler(cls, crawler):
@@ -76,7 +80,7 @@ class MongoPipeline:
         # Determine if popularity prediction is needed based on publish_date
         publish_date = article.get("publish_date")
         needs_prediction = False
-        if publish_date:
+        if isinstance(publish_date, datetime):
             needs_prediction = datetime.now(timezone.utc) - publish_date <= timedelta(
                 hours=24
             )
@@ -100,7 +104,7 @@ class MongoPipeline:
         return item
 
     def _flush(self):
-        if self.collection is None or not self._operations:
+        if self.collection is None or self.logger is None or not self._operations:
             return
 
         try:
