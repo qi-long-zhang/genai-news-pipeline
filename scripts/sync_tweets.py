@@ -12,10 +12,10 @@ load_dotenv()
 
 # Configuration
 TWITTER_API_KEY = os.getenv("TWITTER_API_KEY")
-TARGET_ACCOUNTS = os.getenv("TARGET_ACCOUNTS").split(",")
+TARGET_ACCOUNTS = os.getenv("TARGET_ACCOUNTS", "").split(",")
 MONGO_URI = os.getenv("MONGO_URI")
-MONGO_DATABASE = os.getenv("MONGO_DATABASE")
-MONGO_COLLECTIONS = os.getenv("MONGO_COLLECTIONS").split(",")
+MONGO_DATABASE = os.getenv("MONGO_DATABASE", "")
+MONGO_COLLECTIONS = os.getenv("MONGO_COLLECTIONS", "").split(",")
 
 retries = Retry(
     total=3,
@@ -219,11 +219,12 @@ def ingest_fresh_tweets(target_account, mongo_collection):
         sort=[("created_at", -1)],
         projection={"created_at": 1},
     )
-    latest_created_at = latest_record.get("created_at")
+
+    if not latest_record or not (latest_created_at := latest_record.get("created_at")):
+        return
 
     # Normalize to UTC for consistent comparisons
-    if latest_created_at:
-        latest_created_at = latest_created_at.astimezone(timezone.utc)
+    latest_created_at = latest_created_at.astimezone(timezone.utc)
 
     # Format times for the API query
     since_time = latest_created_at + timedelta(seconds=1)
