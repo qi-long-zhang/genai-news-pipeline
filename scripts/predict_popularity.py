@@ -72,7 +72,7 @@ def process_collection(mongo_collection):
     # Find documents that need prediction and have article data
     cursor = collection.find(
         {
-            "needs_popularity_prediction": True,
+            "needs_prediction": True,
             "article": {"$exists": True},
         },
         projection={"_id": 1, "article": 1},
@@ -137,7 +137,7 @@ def process_collection(mongo_collection):
                             "input_text": formatted_text,
                             "predicted_at": datetime.now(timezone.utc),
                         },
-                        "needs_popularity_prediction": False,
+                        "needs_prediction": False,
                     }
                 },
             )

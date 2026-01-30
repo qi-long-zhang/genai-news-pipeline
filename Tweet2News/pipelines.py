@@ -4,7 +4,7 @@
 # See: https://docs.scrapy.org/en/latest/topics/item-pipeline.html
 
 import re
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 
 from itemadapter import ItemAdapter
 from pymongo import MongoClient, UpdateOne
@@ -73,13 +73,21 @@ class MongoPipeline:
             if field != "_id"
         }
 
+        # Determine if popularity prediction is needed based on publish_date
+        publish_date = article.get("publish_date")
+        needs_prediction = False
+        if publish_date:
+            needs_prediction = datetime.now(timezone.utc) - publish_date <= timedelta(
+                hours=24
+            )
+
         update = UpdateOne(
             {"_id": document_id},
             {
                 "$set": {
                     "article": article,
                     "needs_scraping": False,
-                    "needs_popularity_prediction": True,
+                    "needs_prediction": needs_prediction,
                 }
             },
             upsert=True,
