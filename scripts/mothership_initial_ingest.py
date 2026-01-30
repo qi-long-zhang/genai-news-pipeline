@@ -9,7 +9,7 @@ import time
 load_dotenv()
 
 # Configuration
-API_KEY = os.getenv("API_KEY")
+TWITTER_API_KEY = os.getenv("TWITTER_API_KEY")
 TARGET_ACCOUNT = os.getenv("TARGET_ACCOUNT")  # The account you want to monitor
 MONGO_URI = os.getenv("MONGO_URI")  # MongoDB Atlas connection string
 MONGO_DATABASE = os.getenv("MONGO_DATABASE")  # Database name
@@ -90,7 +90,7 @@ def save_initial_tweets():
     params = {"query": query, "queryType": "Latest"}
 
     # Headers with API key
-    headers = {"X-API-Key": API_KEY}
+    headers = {"X-API-Key": TWITTER_API_KEY}
 
     # Make the request and handle pagination
     all_tweets = []

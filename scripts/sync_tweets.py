@@ -11,7 +11,7 @@ from requests.adapters import HTTPAdapter
 load_dotenv()
 
 # Configuration
-API_KEY = os.getenv("API_KEY")
+TWITTER_API_KEY = os.getenv("TWITTER_API_KEY")
 TARGET_ACCOUNTS = os.getenv("TARGET_ACCOUNTS").split(",")
 MONGO_URI = os.getenv("MONGO_URI")
 MONGO_DATABASE = os.getenv("MONGO_DATABASE")
@@ -129,7 +129,7 @@ def update_tweets(target_account, mongo_collection):
     url = "https://api.twitterapi.io/twitter/tweets"
 
     # Headers with API key
-    headers = {"X-API-Key": API_KEY}
+    headers = {"X-API-Key": TWITTER_API_KEY}
 
     all_tweets = []
 
@@ -243,7 +243,7 @@ def ingest_fresh_tweets(target_account, mongo_collection):
     params = {"query": query, "queryType": "Latest"}
 
     # Headers with API key
-    headers = {"X-API-Key": API_KEY}
+    headers = {"X-API-Key": TWITTER_API_KEY}
 
     # Make the request and handle pagination
     all_tweets = []
