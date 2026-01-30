@@ -13,7 +13,7 @@ load_dotenv()
 
 # Configuration
 MONGO_URI = os.getenv("MONGO_URI")
-MONGO_DATABASE = os.getenv("MONGO_DATABASE")
+MONGO_DATABASE = os.getenv("MONGO_DATABASE", "")
 GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
 MONGO_COLLECTIONS = os.getenv("MONGO_COLLECTIONS", "").split(",")
 if "channel_news_asia" not in MONGO_COLLECTIONS:
@@ -86,7 +86,9 @@ def process_collection(mongo_collection):
     documents = list(cursor)
 
     if not documents:
-        print(f"No documents need enrichment (prediction/embedding) in {mongo_collection}.")
+        print(
+            f"No documents need enrichment (prediction/embedding) in {mongo_collection}."
+        )
         client.close()
         return
 
