@@ -97,7 +97,6 @@ def process_collection(mongo_collection):
 
     # Process in batches
     total_processed = 0
-    total_failed = 0
 
     for i in range(0, len(documents), BATCH_SIZE):
         batch = documents[i : i + BATCH_SIZE]
@@ -111,7 +110,6 @@ def process_collection(mongo_collection):
             # Skip if article is missing required fields
             if not article.get("title"):
                 print(f"Warning: Document {doc_id} missing title, skipping.")
-                total_failed += 1
                 continue
 
             formatted_text = format_article_for_prediction(article)
@@ -124,12 +122,7 @@ def process_collection(mongo_collection):
         predictions = predict_batch(classifier, batch_data)
 
         if not predictions:
-            # If all failed in the batch
-            total_failed += len(batch_data)
             continue
-
-        # Calculate failures in batch (batch_size - successful predictions)
-        total_failed += len(batch_data) - len(predictions)
 
         # Update database with bulk write
         operations = []
@@ -155,8 +148,6 @@ def process_collection(mongo_collection):
             total_processed += result.modified_count
 
     print(f"Successfully processed: {total_processed}")
-    print(f"Failed: {total_failed}")
-    print(f"Total: {len(documents)}")
 
     # Close MongoDB connection
     client.close()
