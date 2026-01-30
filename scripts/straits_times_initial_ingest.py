@@ -12,7 +12,7 @@ load_dotenv()
 TWITTER_API_KEY = os.getenv("TWITTER_API_KEY")
 TARGET_ACCOUNT = "straits_times"  # The account you want to monitor
 MONGO_URI = os.getenv("MONGO_URI")  # MongoDB Atlas connection string
-MONGO_DATABASE = os.getenv("MONGO_DATABASE")  # Database name
+MONGO_DATABASE = os.getenv("MONGO_DATABASE", "")  # Database name
 MONGO_COLLECTION = "straits_times"  # Collection name
 
 
