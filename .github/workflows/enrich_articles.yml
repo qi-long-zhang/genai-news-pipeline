@@ -1,0 +1,31 @@
+name: Enrich Articles
+
+on:
+  workflow_dispatch:
+  repository_dispatch:
+    types: [enrich-articles]
+
+jobs:
+  enrich:
+    runs-on: ubuntu-latest
+    env:
+      MONGO_URI: ${{ secrets.MONGO_URI }}
+      MONGO_DATABASE: ${{ secrets.MONGO_DATABASE }}
+      MONGO_COLLECTIONS: ${{ secrets.MONGO_COLLECTIONS }}
+      GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+      PREDICTION_BATCH_SIZE: 10
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: "pip"
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      - name: Run enrichment
+        run: python scripts/enrich_articles.py
