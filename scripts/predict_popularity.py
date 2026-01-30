@@ -131,7 +131,7 @@ def process_collection(mongo_collection):
                 {"_id": doc_id},
                 {
                     "$set": {
-                        "popularity_prediction": {
+                        "prediction": {
                             "label": prediction.get("label"),
                             "score": prediction.get("score"),
                             "input_text": formatted_text,
