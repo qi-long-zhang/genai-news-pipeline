@@ -4,6 +4,9 @@ from datetime import datetime, timezone
 from pymongo import MongoClient, UpdateOne
 from dotenv import load_dotenv
 from gradio_client import Client
+from google import genai
+from google.genai import types
+from concurrent.futures import ThreadPoolExecutor
 
 # Load environment variables
 load_dotenv()
@@ -11,6 +14,7 @@ load_dotenv()
 # Configuration
 MONGO_URI = os.getenv("MONGO_URI")
 MONGO_DATABASE = os.getenv("MONGO_DATABASE")
+GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
 MONGO_COLLECTIONS = os.getenv("MONGO_COLLECTIONS", "").split(",")
 if "channel_news_asia" not in MONGO_COLLECTIONS:
     MONGO_COLLECTIONS.append("channel_news_asia")
@@ -42,25 +46,26 @@ def format_article_for_prediction(article):
     return f"Headline: {headline}\nSubhead: {subhead}\nLead: {lead}"
 
 
-def predict_batch(client, articles_data):
-    # Prepare texts for batch prediction
-    texts = [data[1] for data in articles_data]
-    predictions = []
-
+def get_embeddings_batch(client, texts):
+    """Generate embeddings for a batch of texts using Gemini API."""
     try:
-        # Call the Gradio client with the list of texts
-        # Expecting the API to handle a list and return a list of results
+        result = client.models.embed_content(
+            model="gemini-embedding-001",
+            contents=texts,
+            config=types.EmbedContentConfig(task_type="SEMANTIC_SIMILARITY"),
+        )
+        return [e.values for e in result.embeddings]
+    except Exception as e:
+        print(f"Error generating embeddings: {e}")
+
+
+def predict_batch(client, texts):
+    """Generate predictions for a batch of texts using Gradio API."""
+    try:
         results = client.predict(texts, api_name="/predict")
-
-        for i, (doc_id, formatted_text) in enumerate(articles_data):
-            prediction = results[i]
-            predictions.append((doc_id, prediction, formatted_text))
-
+        return results
     except Exception as e:
         print(f"Error during batch prediction: {e}")
-        return []
-
-    return predictions
 
 
 def process_collection(mongo_collection):
@@ -95,6 +100,14 @@ def process_collection(mongo_collection):
         client.close()
         return
 
+    # Initialize GenAI Client
+    try:
+        genai_client = genai.Client(api_key=GEMINI_API_KEY)
+    except Exception as e:
+        print(f"Failed to init GenAI client: {e}")
+        client.close()
+        return
+
     # Process in batches
     total_processed = 0
 
@@ -118,28 +131,47 @@ def process_collection(mongo_collection):
         if not batch_data:
             continue
 
-        # Make predictions
-        predictions = predict_batch(classifier, batch_data)
+        # Prepare texts for both prediction and embedding
+        texts = [data[1] for data in batch_data]
 
-        if not predictions:
+        # Run prediction and embedding in parallel
+        predictions = []
+        embeddings = []
+
+        with ThreadPoolExecutor(max_workers=2) as executor:
+            # Submit both tasks
+            prediction_future = executor.submit(predict_batch, classifier, texts)
+            embedding_future = executor.submit(
+                get_embeddings_batch, genai_client, texts
+            )
+
+            # Wait for results
+            predictions = prediction_future.result()
+            embeddings = embedding_future.result()
+
+        if not predictions or not embeddings:
             continue
 
         # Update database with bulk write
         operations = []
-        for doc_id, prediction, formatted_text in predictions:
+        for j, (doc_id, formatted_text) in enumerate(batch_data):
+            prediction = predictions[j]
+            update_doc = {
+                "prediction": {
+                    "label": prediction.get("label"),
+                    "score": prediction.get("score"),
+                    "predicted_at": datetime.now(timezone.utc),
+                },
+                "semantic": {
+                    "text": formatted_text,
+                    "embedding": embeddings[j],
+                },
+                "needs_prediction": False,
+            }
+
             op = UpdateOne(
                 {"_id": doc_id},
-                {
-                    "$set": {
-                        "prediction": {
-                            "label": prediction.get("label"),
-                            "score": prediction.get("score"),
-                            "input_text": formatted_text,
-                            "predicted_at": datetime.now(timezone.utc),
-                        },
-                        "needs_prediction": False,
-                    }
-                },
+                {"$set": update_doc},
             )
             operations.append(op)
 
