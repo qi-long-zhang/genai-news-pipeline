@@ -12,8 +12,8 @@ load_dotenv()
 TWITTER_API_KEY = os.getenv("TWITTER_API_KEY")
 TARGET_ACCOUNT = os.getenv("TARGET_ACCOUNT")  # The account you want to monitor
 MONGO_URI = os.getenv("MONGO_URI")  # MongoDB Atlas connection string
-MONGO_DATABASE = os.getenv("MONGO_DATABASE")  # Database name
-MONGO_COLLECTION = os.getenv("MONGO_COLLECTION")  # Collection name
+MONGO_DATABASE = os.getenv("MONGO_DATABASE", "")  # Database name
+MONGO_COLLECTION = os.getenv("MONGO_COLLECTION", "")  # Collection name
 
 
 def parse_twitter_time(time_str):
