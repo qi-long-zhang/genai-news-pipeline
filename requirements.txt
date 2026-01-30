@@ -6,3 +6,5 @@ requests>=2.32
 scrapy>=2.13
 gradio_client>=1.0.0
 google-genai>=1.0.0
+numpy>=1.26
+networkx>=3.2
