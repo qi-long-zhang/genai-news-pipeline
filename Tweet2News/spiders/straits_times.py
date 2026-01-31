@@ -1,4 +1,5 @@
 import scrapy
+from datetime import timedelta, timezone
 from dateutil import parser
 from pymongo import MongoClient
 
@@ -36,7 +37,10 @@ class StraitsTimesSpider(scrapy.Spider):
         def _parse_date(date_str):
             if not date_str:
                 return None
-            return parser.parse(date_str)
+            dt = parser.parse(date_str)
+            if dt.tzinfo is None:
+                dt = dt.replace(tzinfo=timezone(timedelta(hours=8)))
+            return dt.astimezone(timezone.utc)
 
         item = NewsArticleItem()
         item["_id"] = response.meta.get("_id")
@@ -58,11 +62,12 @@ class StraitsTimesSpider(scrapy.Spider):
             if "Published" in raw_text:
                 item["publish_date"] = _parse_date(
                     _clean(raw_text.replace("Published", ""))
-                )
+                )  # UTC
+                item["update_date"] = item["publish_date"]  # UTC
             elif "Updated" in raw_text:
                 item["update_date"] = _parse_date(
                     _clean(raw_text.replace("Updated", ""))
-                )
+                )  # UTC
 
         summary_container = response.css('div[data-testid="aisummary-test-id"]')
         if summary_container:
