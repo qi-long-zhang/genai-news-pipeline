@@ -1,9 +1,10 @@
 import requests
 from datetime import datetime, timedelta, timezone
-from pymongo import MongoClient
+from pymongo import MongoClient, UpdateOne
 import os
 from dotenv import load_dotenv
 import time
+from concurrent.futures import ThreadPoolExecutor
 from urllib3.util import Retry
 from requests.adapters import HTTPAdapter
 
@@ -104,7 +105,7 @@ def chunked(sequence, size):
         yield sequence[index : index + size]
 
 
-def update_tweets(target_account, mongo_collection):
+def update_tweets(mongo_collection):
     # Connect to MongoDB
     client = MongoClient(MONGO_URI)
     db = client[MONGO_DATABASE]
@@ -174,7 +175,7 @@ def update_tweets(target_account, mongo_collection):
 
     if all_tweets:
         # Update engagement data for each tweet
-        updated_count = 0
+        operations = []
 
         for tweet in all_tweets:
             tweet_id = tweet.get("id")
@@ -188,21 +189,24 @@ def update_tweets(target_account, mongo_collection):
                 "view_count": tweet.get("viewCount", 0),
             }
 
-            # Update the tweet in MongoDB
-            result = collection.update_one(
-                {"_id": tweet_id},
-                {
-                    "$set": {
-                        "engagement": updated_engagement,
-                        "needs_update": False,
-                    }
-                },
+            # Prepare bulk update operation
+            operations.append(
+                UpdateOne(
+                    {"_id": tweet_id},
+                    {
+                        "$set": {
+                            "engagement": updated_engagement,
+                            "needs_update": False,
+                        }
+                    },
+                )
             )
 
-            if result.modified_count > 0:
-                updated_count += 1
-
-        print(f"Successfully updated engagement metrics for {updated_count} tweets.")
+        if operations:
+            result = collection.bulk_write(operations)
+            print(
+                f"Successfully updated engagement metrics for {result.modified_count} tweets."
+            )
 
     # Close the connection
     client.close()
@@ -269,6 +273,7 @@ def ingest_fresh_tweets(target_account, mongo_collection):
             next_cursor_value = data.get("next_cursor")
             if data.get("has_next_page", False) and next_cursor_value:
                 next_cursor = next_cursor_value
+                time.sleep(0.1)  # Add delay to avoid rate limits
                 continue
             break
         else:
@@ -311,45 +316,45 @@ def ingest_fresh_tweets(target_account, mongo_collection):
         # Extract only the fields we need and add metadata
         processed_tweets = []
 
-        for tweet in filtered_tweets:
+        def process_tweet(tweet):
             # Account specific pre-processing filtering for straits_times
             if target_account == "straits_times" and tweet.get("card") is None:
-                continue
+                return None
 
             processed_tweet = extract_tweet_fields(tweet, target_account)
 
             if processed_tweet.get("article_url") is None:
-                continue
+                return None
 
             # Account specific filtering
             if target_account == "straits_times":
+                url = processed_tweet.get("article_url")
                 if (
-                    processed_tweet.get("article_url")
-                    == "https://www.straitstimes.com/"
+                    url == "https://www.straitstimes.com/"
+                    or url == "https://www.straitstimes.com/global"
                 ):
-                    continue
-                if (
-                    processed_tweet.get("article_url")
-                    == "https://www.straitstimes.com/global"
-                ):
-                    continue
-                if (processed_tweet.get("article_url") or "").startswith(
-                    "https://www.straitstimes.com/multimedia"
-                ):
-                    continue
-                if (processed_tweet.get("article_url") or "").startswith(
-                    "https://www.straitstimes.com/newsletter"
-                ):
-                    continue
+                    return None
+                if (url or "").startswith("https://www.straitstimes.com/multimedia"):
+                    return None
+                if (url or "").startswith("https://www.straitstimes.com/newsletter"):
+                    return None
                 if processed_tweet.get("cover_image") is None:
-                    continue
+                    return None
 
             processed_tweet["needs_update"] = until_time - processed_tweet[
                 "created_at"
             ] <= timedelta(days=7)  # Mark for update if within 7 days
             processed_tweet["needs_scraping"] = True  # Mark for scraping
 
-            processed_tweets.append(processed_tweet)
+            return processed_tweet
+
+        # Use ThreadPoolExecutor to process tweets in parallel (mainly for URL expansion)
+        with ThreadPoolExecutor(max_workers=10) as executor:
+            results = executor.map(process_tweet, filtered_tweets)
+
+        for res in results:
+            if res:
+                processed_tweets.append(res)
 
         if not processed_tweets:
             print("No tweets remaining after account-specific filtering.")
@@ -415,8 +420,8 @@ def main():
             f"--- Processing Account: @{target_account} (Collection: {mongo_collection}) ---"
         )
         print(f"Starting to update tweets from @{target_account}")
-        update_tweets(target_account, mongo_collection)
-        time.sleep(1)  # Small delay between operations
+        update_tweets(mongo_collection)
+        time.sleep(0.1)  # Small delay between operations
         print(f"Starting to ingest fresh tweets from @{target_account}")
         ingest_fresh_tweets(target_account, mongo_collection)
         print(f"--- Finished Account: @{target_account} ---\n")
