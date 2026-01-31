@@ -159,7 +159,7 @@ def process_collection(mongo_collection):
                 "prediction": {
                     "label": prediction.get("label"),
                     "score": prediction.get("score"),
-                    "predicted_at": datetime.now(timezone.utc),
+                    "predicted_at": datetime.now(timezone.utc),  # UTC
                 },
                 "embedding": {
                     "text": formatted_text,
