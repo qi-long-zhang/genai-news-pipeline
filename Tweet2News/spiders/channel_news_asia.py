@@ -29,7 +29,7 @@ class ChannelNewsAsiaSpider(scrapy.Spider):
                 projection={"_id": 1, "update_date": 1},
             )
             for doc in cursor:
-                u_date = doc.get("update_date")  # UTC tzinfo
+                u_date = doc.get("update_date")  # UTC
                 if u_date:
                     self.existing_articles[doc["_id"]] = u_date
 
@@ -56,14 +56,14 @@ class ChannelNewsAsiaSpider(scrapy.Spider):
             if article.get("type") != "article":
                 continue
 
-            date = _parse_date(article.get("date"))  # SG tzinfo
-            if date and date < self.cutoff_date:  # SG tzinfo compare with UTC tzinfo
+            date = _parse_date(article.get("date"))  # SGT
+            if date and date < self.cutoff_date:  # SGT compare with UTC
                 return
 
             article_id = article.get("uuid")
             if article_id in self.existing_articles:
-                existing_update_date = self.existing_articles[article_id]  # UTC tzinfo
-                if date == existing_update_date:  # SG tzinfo compare with UTC tzinfo
+                existing_update_date = self.existing_articles[article_id]  # UTC
+                if date == existing_update_date:  # SGT compare with UTC
                     continue
 
             item = NewsArticleItem()
@@ -110,14 +110,14 @@ class ChannelNewsAsiaSpider(scrapy.Spider):
 
         article_publish = content_section.css(".article-publish")
         publish_date = article_publish.css("::text").get()
-        item["publish_date"] = _parse_date(_clean(publish_date))  # UTC tzinfo
-        item["update_date"] = item["publish_date"]
+        item["publish_date"] = _parse_date(_clean(publish_date))  # UTC
+        item["update_date"] = item["publish_date"]  # UTC
         update_date = article_publish.css("span::text").get()
         if update_date:
             cleaned_update_date = _clean(
                 update_date.replace("(Updated:", "").replace(")", "")
             )
-            item["update_date"] = _parse_date(cleaned_update_date)  # UTC tzinfo
+            item["update_date"] = _parse_date(cleaned_update_date)  # UTC
 
         content = []
         content_nodes = content_section.xpath(
