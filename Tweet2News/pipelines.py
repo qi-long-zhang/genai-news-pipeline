@@ -49,9 +49,6 @@ class MongoPipeline:
         )
 
     def open_spider(self):
-        if not self.mongo_uri or not self.mongo_db:
-            raise RuntimeError("Mongo connection settings are required.")
-
         spider = self.crawler.spider
         collection_name = getattr(spider, "mongo_collection", spider.name)
         self.client = MongoClient(self.mongo_uri)
@@ -87,7 +84,7 @@ class MongoPipeline:
         }
 
         # Determine if popularity prediction is needed based on publish_date
-        publish_date = article.get("publish_date")
+        publish_date = article.get("publish_date")  # UTC
         needs_prediction = False
         if isinstance(publish_date, datetime):
             needs_prediction = datetime.now(timezone.utc) - publish_date <= timedelta(
@@ -164,8 +161,5 @@ class MongoPipeline:
 
         if isinstance(value, dict):
             return {key: self._clean_value(val) for key, val in value.items()}
-
-        if isinstance(value, datetime):
-            return value if value.tzinfo else value.replace(tzinfo=timezone.utc)
 
         return value
