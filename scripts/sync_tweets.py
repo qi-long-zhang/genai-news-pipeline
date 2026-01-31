@@ -149,7 +149,7 @@ def update_tweets(mongo_collection):
         else:
             print(f"{label} Error: {response.status_code} - {response.text}")
 
-    for chunk in chunked(tweets_to_update, 3):
+    for chunk in chunked(tweets_to_update, 5):
         fetch_batch(chunk, f"Primary batch {chunk}")
         time.sleep(0.1)  # Small delay to avoid hitting rate limits
 
@@ -160,7 +160,7 @@ def update_tweets(mongo_collection):
     max_retries = 2
     while missing_tweets and retry_count < max_retries:
         retry_count += 1
-        for chunk in chunked(missing_tweets, 3):
+        for chunk in chunked(missing_tweets, 5):
             fetch_batch(chunk, f"Retry batch {chunk}")
             time.sleep(0.1)  # Small delay to avoid hitting rate limits
         returned_ids = {tweet.get("id") for tweet in all_tweets}
