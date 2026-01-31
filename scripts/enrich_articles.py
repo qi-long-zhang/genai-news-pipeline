@@ -133,9 +133,20 @@ def process_collection(mongo_collection):
         # Prepare texts for both prediction and embedding
         texts = [data[1] for data in batch_data]
 
-        # Run prediction and embedding sequentially
-        predictions = predict_batch(classifier, texts)
-        embeddings = get_embeddings_batch(genai_client, texts)
+        # Run prediction and embedding in parallel
+        predictions = []
+        embeddings = []
+
+        with ThreadPoolExecutor(max_workers=2) as executor:
+            # Submit both tasks
+            prediction_future = executor.submit(predict_batch, classifier, texts)
+            embedding_future = executor.submit(
+                get_embeddings_batch, genai_client, texts
+            )
+
+            # Wait for results
+            predictions = prediction_future.result()
+            embeddings = embedding_future.result()
 
         if not predictions or not embeddings:
             continue
