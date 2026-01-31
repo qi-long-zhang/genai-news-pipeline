@@ -74,7 +74,7 @@ def get_article_ref(art):
         "subtitle": article.get("subtitle") or "",
         "summary": article.get("summary") or "",
         "author": article.get("author") or "",
-        "cover_image": article.get("cover_image"),
+        "cover_image": article.get("cover_image") or art.get("cover_image"),
         "publish_date": article.get("publish_date"),
         "update_date": article.get("update_date"),
         "content": article.get("content"),
