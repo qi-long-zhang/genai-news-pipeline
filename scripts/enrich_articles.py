@@ -1,5 +1,4 @@
 import os
-import time
 from datetime import datetime, timezone
 from pymongo import MongoClient, UpdateOne
 from dotenv import load_dotenv
@@ -21,6 +20,10 @@ if "channel_news_asia" not in MONGO_COLLECTIONS:
 BATCH_SIZE = int(
     os.getenv("PREDICTION_BATCH_SIZE", 10)
 )  # Number of articles to process in each batch
+
+# Global MongoDB Client to be shared across threads
+# PyMongo's MongoClient is thread-safe
+global_mongo_client = None
 
 
 def format_article_for_prediction(article):
@@ -69,9 +72,12 @@ def predict_batch(client, texts):
 
 
 def process_collection(mongo_collection):
-    # Connect to MongoDB
-    client = MongoClient(MONGO_URI)
-    db = client[MONGO_DATABASE]
+    print(f"Starting enrichment process for {mongo_collection}")
+
+    # Use the shared global client
+    if global_mongo_client is None:
+        raise RuntimeError("Global Mongo Client not initialized")
+    db = global_mongo_client[MONGO_DATABASE]
     collection = db[mongo_collection]
 
     # Find documents that need prediction and have article data
@@ -86,10 +92,7 @@ def process_collection(mongo_collection):
     documents = list(cursor)
 
     if not documents:
-        print(
-            f"No documents need enrichment (prediction/embedding) in {mongo_collection}."
-        )
-        client.close()
+        print("No documents need enrichment (prediction/embedding).")
         return
 
     print(f"Found {len(documents)} documents needing enrichment.")
@@ -99,7 +102,6 @@ def process_collection(mongo_collection):
         classifier = Client("zhang-qilong/ModernBERT-News")
     except Exception as e:
         print(f"Failed to connect to Gradio Client: {e}")
-        client.close()
         return
 
     # Initialize GenAI Client
@@ -107,7 +109,6 @@ def process_collection(mongo_collection):
         genai_client = genai.Client(api_key=GEMINI_API_KEY)
     except Exception as e:
         print(f"Failed to init GenAI client: {e}")
-        client.close()
         return
 
     # Process in batches
@@ -181,19 +182,24 @@ def process_collection(mongo_collection):
             result = collection.bulk_write(operations)
             total_processed += result.modified_count
 
-    print(f"Successfully processed: {total_processed}")
-
-    # Close MongoDB connection
-    client.close()
+    print(
+        f"--- Finished Collection: {mongo_collection}. Successfully processed: {total_processed} ---\n"
+    )
 
 
 def main():
-    """Main function to process all collections."""
-    for mongo_collection in MONGO_COLLECTIONS:
-        print(f"Starting enrichment process for {mongo_collection}")
-        process_collection(mongo_collection)
-        print(f"--- Finished Collection: {mongo_collection} ---\n")
-        time.sleep(1)  # Small delay between collections
+    """Main function to process all collections concurrently."""
+    global global_mongo_client
+    # Initialize shared MongoDB client
+    global_mongo_client = MongoClient(MONGO_URI)
+
+    try:
+        # Use ThreadPoolExecutor for collection-level concurrency
+        with ThreadPoolExecutor(max_workers=3) as executor:
+            executor.map(process_collection, MONGO_COLLECTIONS)
+    finally:
+        if global_mongo_client:
+            global_mongo_client.close()
 
 
 if __name__ == "__main__":
