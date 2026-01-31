@@ -82,7 +82,7 @@ def extract_tweet_fields(tweet, target_account=None):
         "_id": tweet.get("id"),
         # Basic info
         "x_url": tweet.get("url"),
-        "created_at": parse_twitter_time(tweet.get("createdAt")),
+        "created_at": parse_twitter_time(tweet.get("createdAt")),  # UTC
         # Engagement metrics
         "engagement": {
             "retweet_count": tweet.get("retweetCount", 0),
@@ -214,7 +214,7 @@ def update_tweets(mongo_collection):
 
 def ingest_fresh_tweets(target_account, mongo_collection):
     # Connect to MongoDB
-    client = MongoClient(MONGO_URI)
+    client = MongoClient(MONGO_URI, tz_aware=True)
     db = client[MONGO_DATABASE]
     collection = db[mongo_collection]
 
@@ -227,12 +227,9 @@ def ingest_fresh_tweets(target_account, mongo_collection):
     if not latest_record or not (latest_created_at := latest_record.get("created_at")):
         return
 
-    # Normalize to UTC for consistent comparisons
-    latest_created_at = latest_created_at.astimezone(timezone.utc)
-
     # Format times for the API query
-    since_time = latest_created_at + timedelta(seconds=1)
-    until_time = datetime.now(timezone.utc)
+    since_time = latest_created_at + timedelta(seconds=1)  # UTC
+    until_time = datetime.now(timezone.utc)  # UTC
 
     # Format times as strings in the format Twitter's API expects
     since_str = since_time.strftime("%Y-%m-%d_%H:%M:%S_UTC")
@@ -326,20 +323,24 @@ def ingest_fresh_tweets(target_account, mongo_collection):
             if processed_tweet.get("article_url") is None:
                 return None
 
-            # Account specific filtering
-            if target_account == "straits_times":
-                url = processed_tweet.get("article_url")
-                if (
-                    url == "https://www.straitstimes.com/"
-                    or url == "https://www.straitstimes.com/global"
-                ):
-                    return None
-                if (url or "").startswith("https://www.straitstimes.com/multimedia"):
-                    return None
-                if (url or "").startswith("https://www.straitstimes.com/newsletter"):
-                    return None
-                if processed_tweet.get("cover_image") is None:
-                    return None
+            url = processed_tweet.get("article_url") or ""
+
+            excluded_prefixes = (
+                "https://backend.mothership.sg",
+                "https://www.straitstimes.com/multimedia",
+                "https://www.straitstimes.com/newsletter",
+            )
+
+            excluded_exact = {
+                "https://www.straitstimes.com/",
+                "https://www.straitstimes.com/global",
+            }
+
+            if url.startswith(excluded_prefixes) or url in excluded_exact:
+                return None
+
+            if processed_tweet.get("cover_image") is None:
+                return None
 
             processed_tweet["needs_update"] = until_time - processed_tweet[
                 "created_at"
