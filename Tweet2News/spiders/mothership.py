@@ -1,4 +1,5 @@
 import scrapy
+from datetime import timedelta, timezone
 from dateutil import parser
 from pymongo import MongoClient
 from urllib.parse import urljoin
@@ -37,7 +38,10 @@ class MothershipSpider(scrapy.Spider):
         def _parse_date(date_str):
             if not date_str:
                 return None
-            return parser.parse(date_str)
+            dt = parser.parse(date_str)
+            if dt.tzinfo is None:
+                dt = dt.replace(tzinfo=timezone(timedelta(hours=8)))
+            return dt.astimezone(timezone.utc)
 
         item = NewsArticleItem()
         item["_id"] = response.meta.get("_id")
@@ -52,8 +56,8 @@ class MothershipSpider(scrapy.Spider):
             author_time.css("a[href='#author'].underline::text").get()
         )
         publish_date_str = _clean(author_time.css("div.time h3::text").get())
-        item["publish_date"] = _parse_date(publish_date_str)
-        item["update_date"] = item["publish_date"]
+        item["publish_date"] = _parse_date(publish_date_str)  # UTC
+        item["update_date"] = item["publish_date"]  # UTC
 
         content_section = response.css("div.content")
 
