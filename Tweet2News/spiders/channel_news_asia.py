@@ -78,7 +78,17 @@ class ChannelNewsAsiaSpider(scrapy.Spider):
                 selector = scrapy.Selector(text=summary)
                 summary_list = selector.css("li::text").getall()
                 item["summary"] = [_clean(t) for t in summary_list if _clean(t)]
-            item["author"] = _clean(article.get("author"))
+
+            author_details = article.get("cnar_author_details") or []
+            item["author"] = (
+                ", ".join(
+                    cleaned
+                    for a in author_details
+                    if (cleaned := _clean(a.get("author")))
+                )
+                or None
+            )
+
             item["cover_image"] = article.get("img_extra", {}).get("original")
 
             yield scrapy.Request(
