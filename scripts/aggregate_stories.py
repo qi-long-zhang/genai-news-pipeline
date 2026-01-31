@@ -94,7 +94,7 @@ def check_is_visible(ref_articles):
 
 
 def main():
-    client = MongoClient(MONGO_URI)
+    client = MongoClient(MONGO_URI, tz_aware=True)
     db = client[MONGO_DATABASE]
 
     # 1. Get currently active stories (lifecycle: True)
@@ -171,8 +171,8 @@ def main():
             # Save all clusters of 2+ articles, or 1 if it's popular
             if len(ref_articles) >= 2 or is_visible:
                 new_story = {
-                    "created_at": datetime.now(timezone.utc),
-                    "updated_at": datetime.now(timezone.utc),
+                    "created_at": datetime.now(timezone.utc),  # UTC
+                    "updated_at": datetime.now(timezone.utc),  # UTC
                     "is_active": True,
                     "is_visible": is_visible,
                     "ref_articles": ref_articles,
@@ -192,7 +192,7 @@ def main():
     for story in active_stories:
         latest_upd_date = None
         for ref in story.get("ref_articles", []):
-            upd_date = ref.get("update_date")
+            upd_date = ref.get("update_date")  # UTC
             if upd_date:
                 if latest_upd_date is None or upd_date > latest_upd_date:
                     latest_upd_date = upd_date
@@ -210,7 +210,7 @@ def main():
 
             update_data = {
                 "ref_articles": story["ref_articles"],
-                "updated_at": datetime.now(timezone.utc),
+                "updated_at": datetime.now(timezone.utc),  # UTC
                 "is_active": story.get("is_active", True),
                 "is_visible": new_visibility,
             }
