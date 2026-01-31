@@ -5,6 +5,7 @@
 
 from scrapy import signals
 from scrapy.http import HtmlResponse
+from twisted.internet import threads
 
 import cloudscraper
 
@@ -57,7 +58,7 @@ class CloudScraperMiddleware:
     """
     Minimal middleware to route requests through cloudscraper when
     ``meta["cloudscraper"]`` is set. Useful for bypassing Cloudflare
-    challenges at the cost of synchronous downloads.
+    challenges at the cost of synchronous downloads (now offloaded to threads).
     """
 
     def __init__(self) -> None:
@@ -67,11 +68,19 @@ class CloudScraperMiddleware:
         if not request.meta.get("cloudscraper"):
             return None
 
-        html_content = self.scraper.get(request.url).content
+        # Offload the blocking cloudscraper request to a thread.
+        # Scrapy downloader middlewares can return a Deferred.
+        # When the Deferred fires, Scrapy will resume processing with the result.
+        return threads.deferToThread(self._fetch, request)
+
+    def _fetch(self, request):
+        response = self.scraper.get(request.url)
         return HtmlResponse(
             url=request.url,
-            body=html_content,
+            body=response.content,
             encoding="utf-8",
+            request=request,
+            status=response.status_code,
         )
 
 
