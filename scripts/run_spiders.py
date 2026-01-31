@@ -13,9 +13,6 @@ def main():
     loader = SpiderLoader(settings)
     spider_names = sorted(loader.list())
 
-    if not spider_names:
-        raise SystemExit("No spiders found in the project.")
-
     process = CrawlerProcess(settings)
     for name in spider_names:
         print(f"[+] scheduling spider: {name}")
