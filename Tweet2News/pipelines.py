@@ -3,12 +3,12 @@
 # Don't forget to add your pipeline to the ITEM_PIPELINES setting
 # See: https://docs.scrapy.org/en/latest/topics/item-pipeline.html
 
+import asyncio
 import re
 from datetime import datetime, timedelta, timezone
 
 from itemadapter import ItemAdapter
 from pymongo import MongoClient, UpdateOne
-from twisted.internet import threads
 
 
 class MongoPipeline:
@@ -76,7 +76,7 @@ class MongoPipeline:
             self.collection = None
             self.logger = None
 
-    def process_item(self, item):
+    async def process_item(self, item):
         adapter = ItemAdapter(item)
         document_id = adapter.get("_id")
 
@@ -110,11 +110,11 @@ class MongoPipeline:
         if len(self._operations) >= self.bulk_size:
             # We return the Deferred so Scrapy waits for the write to finish
             # before considering this item "processed".
-            return self._flush()
+            await self._flush()
 
         return item
 
-    def _flush(self):
+    async def _flush(self):
         if not self._operations:
             return
 
@@ -123,7 +123,7 @@ class MongoPipeline:
         # Clear the buffer immediately so new items can be added while writing happens
         self._operations = []
 
-        return threads.deferToThread(self._write_batch, ops_to_write)
+        await asyncio.to_thread(self._write_batch, ops_to_write)
 
     def _flush_sync(self):
         """Synchronous flush for close_spider"""

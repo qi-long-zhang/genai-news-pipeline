@@ -3,9 +3,10 @@
 # See documentation in:
 # https://docs.scrapy.org/en/latest/topics/spider-middleware.html
 
+import asyncio
+
 from scrapy import signals
 from scrapy.http import HtmlResponse
-from twisted.internet import threads
 
 import cloudscraper
 
@@ -64,14 +65,12 @@ class CloudScraperMiddleware:
     def __init__(self) -> None:
         self.scraper = cloudscraper.create_scraper()
 
-    def process_request(self, request):
+    async def process_request(self, request):
         if not request.meta.get("cloudscraper"):
             return None
 
-        # Offload the blocking cloudscraper request to a thread.
-        # Scrapy downloader middlewares can return a Deferred.
-        # When the Deferred fires, Scrapy will resume processing with the result.
-        return threads.deferToThread(self._fetch, request)
+        # Offload the blocking cloudscraper request to a thread using asyncio.
+        return await asyncio.to_thread(self._fetch, request)
 
     def _fetch(self, request):
         response = self.scraper.get(request.url)
