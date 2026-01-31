@@ -8,6 +8,7 @@ from datetime import datetime, timedelta, timezone
 
 from itemadapter import ItemAdapter
 from pymongo import MongoClient, UpdateOne
+from twisted.internet import threads
 
 
 class MongoPipeline:
@@ -59,7 +60,15 @@ class MongoPipeline:
         self.logger = spider.logger
 
     def close_spider(self):
-        self._flush()
+        # We need to ensure any remaining operations are flushed.
+        # Since close_spider is synchronous, we can't easily wait for a Deferred here
+        # if we were to just call self._flush().
+        # However, for simplicity and safety in shutdown, we can fallback to
+        # synchronous flush here or try to ensure _flush returns a Deferred.
+        # But Scrapy's close_spider doesn't await Deferreds unless using async def (Scrapy 2.0+).
+        # Let's perform a synchronous flush for the last batch to ensure data integrity on exit.
+        if self._operations:
+            self._flush_sync()
 
         if self.client:
             self.client.close()
@@ -99,27 +108,50 @@ class MongoPipeline:
         self._operations.append(update)
 
         if len(self._operations) >= self.bulk_size:
-            self._flush()
+            # We return the Deferred so Scrapy waits for the write to finish
+            # before considering this item "processed".
+            return self._flush()
 
         return item
 
     def _flush(self):
-        if self.collection is None or self.logger is None or not self._operations:
+        if not self._operations:
+            return
+
+        # Copy operations to a local variable to be passed to the thread
+        ops_to_write = list(self._operations)
+        # Clear the buffer immediately so new items can be added while writing happens
+        self._operations = []
+
+        return threads.deferToThread(self._write_batch, ops_to_write)
+
+    def _flush_sync(self):
+        """Synchronous flush for close_spider"""
+        if not self._operations:
+            return
+        ops_to_write = list(self._operations)
+        self._operations = []
+        self._write_batch(ops_to_write)
+
+    def _write_batch(self, operations):
+        if self.collection is None or self.logger is None:
             return
 
         try:
-            result = self.collection.bulk_write(self._operations, ordered=False)
+            result = self.collection.bulk_write(operations, ordered=False)
             inserted = result.upserted_count
             modified = result.modified_count
             matched = result.matched_count
+            # Logging in a thread is generally thread-safe in Python's logging module
             self.logger.warning(
-                "MongoPipeline bulk_write: matched=%s modified=%s upserted=%s",
+                "MongoPipeline bulk_write (async): matched=%s modified=%s upserted=%s",
                 matched,
                 modified,
                 inserted,
             )
-        finally:
-            self._operations = []
+        except Exception as e:
+            self.logger.error(f"Failed to write batch to MongoDB: {e}")
+            raise
 
     def _clean_value(self, value):
         if isinstance(value, str):
