@@ -72,8 +72,6 @@ def predict_batch(client, texts):
 
 
 def process_collection(mongo_collection):
-    print(f"Starting enrichment process for {mongo_collection}")
-
     # Use the shared global client
     if global_mongo_client is None:
         raise RuntimeError("Global Mongo Client not initialized")
@@ -92,23 +90,21 @@ def process_collection(mongo_collection):
     documents = list(cursor)
 
     if not documents:
-        print("No documents need enrichment (prediction/embedding).")
+        print(f"[{mongo_collection}] No documents need enrichment.")
         return
-
-    print(f"Found {len(documents)} documents needing enrichment.")
 
     # Initialize Gradio Client
     try:
         classifier = Client("zhang-qilong/ModernBERT-News")
     except Exception as e:
-        print(f"Failed to connect to Gradio Client: {e}")
+        print(f"[{mongo_collection}] Failed to connect to Gradio Client: {e}")
         return
 
     # Initialize GenAI Client
     try:
         genai_client = genai.Client(api_key=GEMINI_API_KEY)
     except Exception as e:
-        print(f"Failed to init GenAI client: {e}")
+        print(f"[{mongo_collection}] Failed to init GenAI client: {e}")
         return
 
     # Process in batches
@@ -183,7 +179,7 @@ def process_collection(mongo_collection):
             total_processed += result.modified_count
 
     print(
-        f"--- Finished Collection: {mongo_collection}. Successfully processed: {total_processed} ---\n"
+        f"[{mongo_collection}] Finished. Found: {len(documents)}, Processed: {total_processed}"
     )
 
 
