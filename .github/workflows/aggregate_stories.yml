@@ -1,0 +1,29 @@
+name: Aggregate Stories
+
+on:
+  workflow_dispatch:
+  repository_dispatch:
+    types: [aggregate-stories]
+
+jobs:
+  aggregate:
+    runs-on: ubuntu-latest
+    env:
+      MONGO_URI: ${{ secrets.MONGO_URI }}
+      MONGO_DATABASE: ${{ secrets.MONGO_DATABASE }}
+      MONGO_COLLECTIONS: ${{ secrets.MONGO_COLLECTIONS }}
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: "pip"
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      - name: Run aggregation
+        run: python scripts/aggregate_stories.py
