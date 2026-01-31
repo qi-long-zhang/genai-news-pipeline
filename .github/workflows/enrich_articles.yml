@@ -13,7 +13,7 @@ jobs:
       MONGO_DATABASE: ${{ secrets.MONGO_DATABASE }}
       MONGO_COLLECTIONS: ${{ secrets.MONGO_COLLECTIONS }}
       GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
-      PREDICTION_BATCH_SIZE: 10
+      PREDICTION_BATCH_SIZE: 20
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
