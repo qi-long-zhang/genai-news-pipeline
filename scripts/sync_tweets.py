@@ -339,6 +339,10 @@ def ingest_fresh_tweets(target_account, mongo_collection):
             if url.startswith(excluded_prefixes) or url in excluded_exact:
                 return None
 
+            # Skip articles containing "while-you-were-sleeping" in the URL
+            if "while-you-were-sleeping" in url:
+                return None
+
             if processed_tweet.get("cover_image") is None:
                 return None
 
