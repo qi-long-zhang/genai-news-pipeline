@@ -114,7 +114,7 @@ def update_tweets(mongo_collection):
     now = datetime.now(timezone.utc)
     tweet_cursor = collection.find(
         {"needs_update": True, "created_at": {"$lte": now - timedelta(days=7)}},
-        projection={"_id": 1, "created_at": 1},
+        projection={"_id": 1},
     )
 
     tweets_to_update = [tweet["_id"] for tweet in tweet_cursor]
