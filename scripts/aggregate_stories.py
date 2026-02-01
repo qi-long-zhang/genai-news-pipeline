@@ -35,13 +35,16 @@ def get_active_stories(db):
 def get_new_articles(db):
     """
     Fetch all new articles from all collections within the NEW_ARTICLE_WINDOW_HOURS.
+    Returns articles with their collection name for tracking.
     """
     cutoff_date = datetime.now(timezone.utc) - timedelta(hours=NEW_ARTICLE_WINDOW_HOURS)
     new_articles = []
 
     for coll_name in MONGO_COLLECTIONS:
         cursor = db[coll_name].find({"article.publish_date": {"$gte": cutoff_date}})
-        new_articles.extend(list(cursor))
+        for art in cursor:
+            art["_collection_name"] = coll_name  # Track which collection this came from
+            new_articles.append(art)
 
     return new_articles
 
@@ -65,7 +68,7 @@ def calculate_cosine_similarity(vec1, vec2):
 
 def get_article_ref(art):
     """
-    Extract necessary fields for ref_articles.
+    Extract necessary fields for ref_articles to be stored in stories.
     """
     article = art.get("article", {})
     return {
@@ -79,6 +82,7 @@ def get_article_ref(art):
         "update_date": article.get("update_date"),
         "content": article.get("content"),
         "source": article.get("source") or art.get("source"),
+        "collection": art.get("_collection_name"),  # Store for efficient lookups
         "embedding": art.get("embedding", {}).get("vector"),
         "is_popular": art.get("prediction", {}).get("label") == "popular",
     }
@@ -93,6 +97,46 @@ def check_is_visible(ref_articles):
     return has_popular or len(ref_articles) >= 3
 
 
+def update_ref_articles_from_source(db, active_stories):
+    """
+    Update ref_articles in active stories if the source article has needs_aggregation=True.
+    Returns a list of source articles to mark as aggregated (needs_aggregation=False).
+    """
+    updated_count = 0
+    articles_to_mark = []  # Store (collection_name, article_id) tuples
+
+    for story in active_stories:
+        ref_articles = story.get("ref_articles", [])
+        updated = False
+
+        for i, ref_article in enumerate(ref_articles):
+            url = ref_article.get("url")
+            coll_name = ref_article.get("collection")
+
+            source_article = db[coll_name].find_one(
+                {"article.article_url": url, "needs_aggregation": True}
+            )
+            if source_article:
+                # Update the ref_article with latest data
+                ref_articles[i] = get_article_ref(source_article)
+                updated = True
+                # Record for later bulk update
+                articles_to_mark.append((coll_name, source_article["_id"]))
+
+        if updated:
+            story["ref_articles"] = ref_articles
+            story["is_updated"] = True
+            story["summarization"] = None  # Reset to trigger regeneration
+            updated_count += 1
+
+    if updated_count > 0:
+        print(
+            f"Prepared {updated_count} stories for update with {len(articles_to_mark)} ref_articles from source collections."
+        )
+
+    return articles_to_mark
+
+
 def main():
     client = MongoClient(MONGO_URI, tz_aware=True)
     db = client[MONGO_DATABASE]
@@ -100,10 +144,13 @@ def main():
     # 1. Get currently active stories (lifecycle: True)
     active_stories = get_active_stories(db)
 
-    # 2. Get new articles to process
+    # 2. Update ref_articles from source collections where needs_aggregation=True
+    articles_to_mark = update_ref_articles_from_source(db, active_stories)
+
+    # 3. Get new articles to process
     new_articles = get_new_articles(db)
 
-    # 3. Filter and deduplicate new articles
+    # 4. Filter and deduplicate new articles
     existing_article_urls = set()
     for story in active_stories:
         for article_ref in story.get("ref_articles", []):
@@ -115,7 +162,7 @@ def main():
         if art.get("article", {}).get("article_url") not in existing_article_urls
     ]
 
-    # 4. Try to merge new articles into existing active stories
+    # 5. Try to merge new articles into existing active stories
     remaining_articles = []
     merged_count = 0
 
@@ -134,7 +181,9 @@ def main():
                 ):
                     story.setdefault("ref_articles", []).append(get_article_ref(art))
                     story["is_updated"] = True
-                    story["is_content_updated"] = True
+                    story["summarization"] = None  # Reset to trigger regeneration
+                    # Track article for needs_aggregation update
+                    articles_to_mark.append((art["_collection_name"], art["_id"]))
                     found_match = True
                     merged_count += 1
                     break
@@ -144,7 +193,7 @@ def main():
         if not found_match:
             remaining_articles.append(art)
 
-    # 5. Cluster remaining articles using chain aggregation
+    # 6. Cluster remaining articles using chain aggregation
     if remaining_articles:
         G = nx.Graph()
         for i in range(len(remaining_articles)):
@@ -180,11 +229,15 @@ def main():
                 }
                 new_stories_to_insert.append(new_story)
 
+                # Track articles for needs_aggregation update
+                for art in component_articles:
+                    articles_to_mark.append((art["_collection_name"], art["_id"]))
+
         if new_stories_to_insert:
             db[HOT_STORIES_COLLECTION].insert_many(new_stories_to_insert)
             print(f"Created {len(new_stories_to_insert)} new stories.")
 
-    # 6. Lifecycle Management: Deactivate expired stories
+    # 7. Lifecycle Management: Deactivate expired stories
     retention_cutoff = datetime.now(timezone.utc) - timedelta(
         hours=STORY_RETENTION_HOURS
     )
@@ -202,7 +255,7 @@ def main():
             story["is_updated"] = True
             deactivated_count += 1
 
-    # 7. Final Sync: Update existing stories
+    # 8. Final Sync: Update existing stories
     bulk_updates = []
     for story in active_stories:
         if story.get("is_updated"):
@@ -213,11 +266,10 @@ def main():
                 "updated_at": datetime.now(timezone.utc),  # UTC
                 "is_active": story.get("is_active", True),
                 "is_visible": new_visibility,
+                "summarization": story.get(
+                    "summarization"
+                ),  # Include updated summarization
             }
-
-            # Reset summary if visibility status changed to True OR new articles added while visible
-            if new_visibility and story.get("is_content_updated"):
-                update_data["summarization"] = None
 
             bulk_updates.append(UpdateOne({"_id": story["_id"]}, {"$set": update_data}))
 
@@ -226,6 +278,29 @@ def main():
         print(
             f"Updated {len(bulk_updates)} existing stories (Deactivated {deactivated_count})."
         )
+
+        # 9. Mark source articles as aggregated (needs_aggregation=False)
+        # Only execute after stories are successfully written to database
+        if articles_to_mark:
+            bulk_updates_by_collection = {
+                coll_name: [] for coll_name in MONGO_COLLECTIONS
+            }
+            for coll_name, article_id in articles_to_mark:
+                bulk_updates_by_collection[coll_name].append(
+                    UpdateOne(
+                        {"_id": article_id}, {"$set": {"needs_aggregation": False}}
+                    )
+                )
+
+            total_marked = 0
+            for coll_name, updates in bulk_updates_by_collection.items():
+                if updates:
+                    db[coll_name].bulk_write(updates)
+                    total_marked += len(updates)
+
+            print(
+                f"Marked {total_marked} source articles as aggregated (needs_aggregation=False)."
+            )
 
     client.close()
 
