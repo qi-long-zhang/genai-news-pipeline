@@ -81,7 +81,7 @@ def process_collection(mongo_collection):
     # Find documents that need prediction and have article data
     cursor = collection.find(
         {
-            "needs_prediction": True,
+            "needs_enrichment": True,
             "article": {"$exists": True},
         },
         projection={"_id": 1, "article": 1},
@@ -165,7 +165,8 @@ def process_collection(mongo_collection):
                     "text": formatted_text,
                     "vector": embeddings[j],
                 },
-                "needs_prediction": False,
+                "needs_enrichment": False,
+                "needs_aggregation": True,
             }
 
             op = UpdateOne(

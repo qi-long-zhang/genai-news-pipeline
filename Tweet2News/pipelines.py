@@ -85,9 +85,9 @@ class MongoPipeline:
 
         # Determine if popularity prediction is needed based on publish_date
         publish_date = article.get("publish_date")  # UTC
-        needs_prediction = False
+        needs_enrichment = False
         if isinstance(publish_date, datetime):
-            needs_prediction = datetime.now(timezone.utc) - publish_date <= timedelta(
+            needs_enrichment = datetime.now(timezone.utc) - publish_date <= timedelta(
                 hours=24
             )
 
@@ -97,7 +97,7 @@ class MongoPipeline:
                 "$set": {
                     "article": article,
                     "needs_scraping": False,
-                    "needs_prediction": needs_prediction,
+                    "needs_enrichment": needs_enrichment,
                 }
             },
             upsert=True,
