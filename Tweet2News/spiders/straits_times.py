@@ -50,6 +50,12 @@ class StraitsTimesSpider(scrapy.Spider):
             response.css('h1[data-testid="heading-test-id"]::text').get()
         )
 
+        item["subtitle"] = _clean(
+            response.css(
+                'div[data-testid="headline-stack-test-id"] p.font-body-baseline-regular[data-testid="paragraph-test-id"]::text'
+            ).get()
+        )
+
         item["author"] = _clean(
             response.css(
                 '[data-testid="masthead-author-byline-test-id"] p.font-eyebrow-lg-bold::text'
