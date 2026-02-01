@@ -41,6 +41,7 @@ def format_article_for_prediction(article):
             and "update at" not in text_0_lower
             and "editor" not in text_0_lower
             and "warning:" not in text_0_lower
+            and "explore the psle companion" not in text_0_lower
         ):
             lead = text_0
         elif len(content) > 1:
