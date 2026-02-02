@@ -27,3 +27,6 @@ jobs:
 
       - name: Run spiders
         run: python scripts/run_spiders.py
+
+      - name: Remove duplicates
+        run: python scripts/remove_duplicates.py
