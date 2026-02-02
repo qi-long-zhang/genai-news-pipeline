@@ -85,6 +85,7 @@ def get_article_ref(art):
         "collection": art.get("_collection_name"),  # Store for efficient lookups
         "embedding": art.get("embedding", {}).get("vector"),
         "is_popular": art.get("prediction", {}).get("label") == "popular",
+        "score": art.get("prediction", {}).get("score", 0),
     }
 
 
@@ -282,14 +283,10 @@ def main():
     # 9. Mark source articles as aggregated (needs_aggregation=False)
     # Only execute after stories are successfully written to database
     if articles_to_mark:
-        bulk_updates_by_collection = {
-            coll_name: [] for coll_name in MONGO_COLLECTIONS
-        }
+        bulk_updates_by_collection = {coll_name: [] for coll_name in MONGO_COLLECTIONS}
         for coll_name, article_id in articles_to_mark:
             bulk_updates_by_collection[coll_name].append(
-                UpdateOne(
-                    {"_id": article_id}, {"$set": {"needs_aggregation": False}}
-                )
+                UpdateOne({"_id": article_id}, {"$set": {"needs_aggregation": False}})
             )
 
         total_marked = 0
