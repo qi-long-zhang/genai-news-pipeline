@@ -279,28 +279,28 @@ def main():
             f"Updated {len(bulk_updates)} existing stories (Deactivated {deactivated_count})."
         )
 
-        # 9. Mark source articles as aggregated (needs_aggregation=False)
-        # Only execute after stories are successfully written to database
-        if articles_to_mark:
-            bulk_updates_by_collection = {
-                coll_name: [] for coll_name in MONGO_COLLECTIONS
-            }
-            for coll_name, article_id in articles_to_mark:
-                bulk_updates_by_collection[coll_name].append(
-                    UpdateOne(
-                        {"_id": article_id}, {"$set": {"needs_aggregation": False}}
-                    )
+    # 9. Mark source articles as aggregated (needs_aggregation=False)
+    # Only execute after stories are successfully written to database
+    if articles_to_mark:
+        bulk_updates_by_collection = {
+            coll_name: [] for coll_name in MONGO_COLLECTIONS
+        }
+        for coll_name, article_id in articles_to_mark:
+            bulk_updates_by_collection[coll_name].append(
+                UpdateOne(
+                    {"_id": article_id}, {"$set": {"needs_aggregation": False}}
                 )
-
-            total_marked = 0
-            for coll_name, updates in bulk_updates_by_collection.items():
-                if updates:
-                    db[coll_name].bulk_write(updates)
-                    total_marked += len(updates)
-
-            print(
-                f"Marked {total_marked} source articles as aggregated (needs_aggregation=False)."
             )
+
+        total_marked = 0
+        for coll_name, updates in bulk_updates_by_collection.items():
+            if updates:
+                db[coll_name].bulk_write(updates)
+                total_marked += len(updates)
+
+        print(
+            f"Marked {total_marked} source articles as aggregated (needs_aggregation=False)."
+        )
 
     client.close()
 
