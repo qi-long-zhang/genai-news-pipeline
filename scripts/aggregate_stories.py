@@ -119,6 +119,9 @@ def update_ref_articles_from_source(db, active_stories):
             )
             if source_article:
                 # Update the ref_article with latest data
+                source_article["_collection_name"] = (
+                    coll_name  # Restore collection name
+                )
                 ref_articles[i] = get_article_ref(source_article)
                 updated = True
                 # Record for later bulk update
