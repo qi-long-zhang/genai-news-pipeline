@@ -429,8 +429,8 @@ def main():
         print(f"Starting to update tweets from @{target_account}")
         update_tweets(mongo_collection)
         time.sleep(0.1)  # Small delay between operations
-        print(f"Starting to ingest fresh tweets from @{target_account}")
-        ingest_fresh_tweets(target_account, mongo_collection)
+        # print(f"Starting to ingest fresh tweets from @{target_account}")
+        # ingest_fresh_tweets(target_account, mongo_collection)
         print(f"--- Finished Account: @{target_account} ---\n")
 
 
