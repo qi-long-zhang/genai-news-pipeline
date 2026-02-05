@@ -73,7 +73,10 @@ class CloudScraperMiddleware:
         return await asyncio.to_thread(self._fetch, request)
 
     def _fetch(self, request):
-        response = self.scraper.get(request.url)
+        # Convert Scrapy headers to a dictionary for cloudscraper
+        headers = {k.decode("utf-8"): v[0].decode("utf-8") for k, v in request.headers.items()}
+        
+        response = self.scraper.get(request.url, headers=headers)
         return HtmlResponse(
             url=request.url,
             body=response.content,

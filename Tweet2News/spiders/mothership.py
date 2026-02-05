@@ -28,6 +28,7 @@ class MothershipSpider(scrapy.Spider):
 
                 yield scrapy.Request(
                     url=article_url,
+                    headers={"Referer": "https://mothership.sg/"},
                     meta={"cloudscraper": True, "_id": _id, "article_url": article_url},
                 )
 
