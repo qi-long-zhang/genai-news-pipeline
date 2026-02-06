@@ -38,9 +38,6 @@ class ChannelNewsAsiaSpider(scrapy.Spider):
         )
 
     def parse(self, response):
-        def _clean(value):
-            return value.strip() if value else None
-
         def _parse_date(date_str):
             if not date_str:
                 return None
@@ -72,19 +69,17 @@ class ChannelNewsAsiaSpider(scrapy.Spider):
 
             item["title"] = article.get("title")
             description = article.get("description") or ""
-            item["subtitle"] = _clean(remove_tags(replace_entities(description)))
+            item["subtitle"] = remove_tags(replace_entities(description))
             summary = article.get("fast", {}).get("tldr_for_shorts", [])
             if summary:
-                selector = scrapy.Selector(text=summary)
-                summary_list = selector.css("li::text").getall()
-                item["summary"] = [_clean(t) for t in summary_list if _clean(t)]
+                item["summary"] = scrapy.Selector(text=summary).css("li::text").getall()
 
             author_details = article.get("cnar_author_details") or []
             item["author"] = (
                 ", ".join(
                     cleaned
                     for a in author_details
-                    if (cleaned := _clean(a.get("author")))
+                    if (cleaned := a.get("author").strip())
                 )
                 or None
             )
@@ -140,7 +135,7 @@ class ChannelNewsAsiaSpider(scrapy.Spider):
         )
         for node in content_nodes:
             tag = node.root.tag
-            text = _clean(node.xpath("string(.)").get())
+            text = node.xpath("string(.)").get()
             if text:
                 content.append({"type": tag, "text": text})
         item["content"] = content
@@ -148,8 +143,8 @@ class ChannelNewsAsiaSpider(scrapy.Spider):
         images = []
         image_nodes = content_section.css("figure")
         for img_node in image_nodes:
-            img_url = _clean(img_node.css("img::attr(src)").get())
-            caption = _clean(img_node.xpath("normalize-space(.//figcaption)").get())
+            img_url = img_node.css("img::attr(src)").get()
+            caption = img_node.xpath("normalize-space(.//figcaption)").get()
             if img_url:
                 images.append({"url": img_url, "caption": caption})
         item["images"] = images
@@ -159,7 +154,7 @@ class ChannelNewsAsiaSpider(scrapy.Spider):
             "iframe[src*='youtube.com'], iframe[src*='youtu.be']"
         )
         for vid_node in youtube_nodes:
-            vid_url = _clean(vid_node.css("::attr(src)").get())
+            vid_url = vid_node.css("::attr(src)").get()
             if vid_url:
                 videos.append(vid_url)
         brightcove_nodes = content_section.css("video-js")
@@ -176,16 +171,16 @@ class ChannelNewsAsiaSpider(scrapy.Spider):
         item["videos"] = videos
 
         item["source"] = "CNA"
-        source = _clean(content_section.css(".source.source--with-label::text").get())
+        source = content_section.css(".source.source--with-label::text").get()
         if source:
-            item["source"] = _clean(source.replace("Source:", ""))
+            source.replace("Source:", "")
 
         links = []
         for node in content_nodes:
             a_nodes = node.css("a")
             for a_node in a_nodes:
                 raw_url = _clean(a_node.css("::attr(href)").get())
-                text = _clean(a_node.xpath("string(.)").get())
+                text = a_node.xpath("string(.)").get()
                 if not raw_url or raw_url.startswith(("javascript:", "mailto:", "#")):
                     continue
                 clean_url = response.urljoin(raw_url.split("?")[0])
@@ -198,12 +193,13 @@ class ChannelNewsAsiaSpider(scrapy.Spider):
         embeds = []
         embed_nodes = content_section.css("blockquote.instagram-media")
         for embed_node in embed_nodes:
-            embed_url = _clean(embed_node.css("::attr(data-instgrm-permalink)").get())
+            embed_url = embed_node.css("::attr(data-instgrm-permalink)").get()
             if embed_url:
                 embeds.append(embed_url)
         item["embeds"] = embeds
 
-        topics = content_section.css("[data-title='Related Topics'] a::text").getall()
-        item["topics"] = [_clean(t) for t in topics if _clean(t)]
+        item["topics"] = content_section.css(
+            "[data-title='Related Topics'] a::text"
+        ).getall()
 
         yield item
