@@ -15,19 +15,19 @@ class StraitsTimesSpider(scrapy.Spider):
         mongo_db = self.settings.get("MONGO_DATABASE")
         mongo_collection = self.name
 
-        query = {"needs_scraping": True, "article_url": {"$exists": True, "$ne": None}}
+        query = {"needs_scraping": True, "url": {"$exists": True, "$ne": None}}
 
         with MongoClient(mongo_uri) as client:
             collection = client[mongo_db][mongo_collection]
             for doc in collection.find(query):
-                article_url = doc.get("article_url")
+                url = doc.get("url")
                 _id = doc.get("_id")
-                if not article_url:
+                if not url:
                     continue
 
                 yield scrapy.Request(
-                    url=article_url,
-                    meta={"cloudscraper": True, "_id": _id, "article_url": article_url},
+                    url=url,
+                    meta={"_id": _id, "url": url},
                 )
 
     def parse(self, response):
@@ -44,7 +44,7 @@ class StraitsTimesSpider(scrapy.Spider):
 
         item = NewsArticleItem()
         item["_id"] = response.meta.get("_id")
-        item["article_url"] = response.meta.get("article_url")
+        item["url"] = response.meta.get("url")
 
         item["title"] = _clean(
             response.css('h1[data-testid="heading-test-id"]::text').get()
@@ -150,7 +150,7 @@ class StraitsTimesSpider(scrapy.Spider):
 
         topics = []
         topic_nodes = response.css(
-            'div[data-testid="tags-test-id"] button[data-testid="button-test-id"]'
+            'div[data-testid="tags-test-id"] p[data-testid="topic-tag-content-test-id"]'
         )
         for node in topic_nodes:
             topic_text = _clean(node.xpath("string(.)").get())

@@ -68,7 +68,7 @@ class ChannelNewsAsiaSpider(scrapy.Spider):
 
             item = NewsArticleItem()
             item["_id"] = article_id
-            item["article_url"] = article.get("absolute_url")
+            item["url"] = article.get("absolute_url")
 
             item["title"] = article.get("title")
             description = article.get("description") or ""
@@ -92,7 +92,7 @@ class ChannelNewsAsiaSpider(scrapy.Spider):
             item["cover_image"] = article.get("img_extra", {}).get("original")
 
             yield scrapy.Request(
-                item["article_url"],
+                item["url"],
                 self.parse_article,
                 meta={"cloudscraper": True, "item": item},
             )

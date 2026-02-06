@@ -16,20 +16,20 @@ class MothershipSpider(scrapy.Spider):
         mongo_db = self.settings.get("MONGO_DATABASE")
         mongo_collection = self.name
 
-        query = {"needs_scraping": True, "article_url": {"$exists": True, "$ne": None}}
+        query = {"needs_scraping": True, "url": {"$exists": True, "$ne": None}}
 
         with MongoClient(mongo_uri) as client:
             collection = client[mongo_db][mongo_collection]
             for doc in collection.find(query):
-                article_url = doc.get("article_url")
+                url = doc.get("url")
                 _id = doc.get("_id")
-                if not article_url:
+                if not url:
                     continue
 
                 yield scrapy.Request(
-                    url=article_url,
+                    url=url,
                     headers={"Referer": "https://mothership.sg/"},
-                    meta={"cloudscraper": True, "_id": _id, "article_url": article_url},
+                    meta={"cloudscraper": True, "_id": _id, "url": url},
                 )
 
     def parse(self, response):
@@ -46,7 +46,7 @@ class MothershipSpider(scrapy.Spider):
 
         item = NewsArticleItem()
         item["_id"] = response.meta.get("_id")
-        item["article_url"] = response.meta.get("article_url")
+        item["url"] = response.meta.get("url")
 
         head = response.css("div.article-head")
         item["title"] = _clean(head.css("h1.title::text").get())
