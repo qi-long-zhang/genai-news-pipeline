@@ -72,7 +72,7 @@ def get_article_ref(art):
     """
     article = art.get("article", {})
     return {
-        "url": article.get("article_url"),
+        "url": article.get("url"),
         "title": article.get("title"),
         "subtitle": article.get("subtitle") or "",
         "summary": article.get("summary") or "",
@@ -115,7 +115,7 @@ def update_ref_articles_from_source(db, active_stories):
             coll_name = ref_article.get("collection")
 
             source_article = db[coll_name].find_one(
-                {"article.article_url": url, "needs_aggregation": True}
+                {"article.url": url, "needs_aggregation": True}
             )
             if source_article:
                 # Update the ref_article with latest data
@@ -155,15 +155,15 @@ def main():
     new_articles = get_new_articles(db)
 
     # 4. Filter and deduplicate new articles
-    existing_article_urls = set()
+    existing_urls = set()
     for story in active_stories:
         for article_ref in story.get("ref_articles", []):
-            existing_article_urls.add(article_ref["url"])
+            existing_urls.add(article_ref["url"])
 
     new_articles = [
         art
         for art in new_articles
-        if art.get("article", {}).get("article_url") not in existing_article_urls
+        if art.get("article", {}).get("url") not in existing_urls
     ]
 
     # 5. Try to merge new articles into existing active stories

@@ -75,7 +75,7 @@ def extract_tweet_fields(tweet, target_account=None):
     # Safely extract article URL (first URL if exists) and expand it
     urls_list = tweet.get("entities", {}).get("urls", [])
     short_url = urls_list[0].get("expanded_url") if urls_list else None
-    article_url = expand_url(short_url) if short_url else None
+    url = expand_url(short_url) if short_url else None
 
     return {
         # Use tweet ID as MongoDB _id to prevent duplicates
@@ -94,7 +94,7 @@ def extract_tweet_fields(tweet, target_account=None):
         # Media content
         "cover_image": cover_image,
         # News article link
-        "article_url": article_url,
+        "url": url,
         # News source
         "source": tweet.get("author", {}).get("name"),
     }
@@ -320,10 +320,10 @@ def ingest_fresh_tweets(target_account, mongo_collection):
 
             processed_tweet = extract_tweet_fields(tweet, target_account)
 
-            if processed_tweet.get("article_url") is None:
+            if processed_tweet.get("url") is None:
                 return None
 
-            url = processed_tweet.get("article_url") or ""
+            url = processed_tweet.get("url") or ""
 
             excluded_prefixes = (
                 "https://backend.mothership.sg",
@@ -368,12 +368,12 @@ def ingest_fresh_tweets(target_account, mongo_collection):
             client.close()
             return
 
-        # Deduplicate within the current batch based on article_url
+        # Deduplicate within the current batch based on url
         # Keep the first occurrence (which is the newest due to API order)
         seen_urls = set()
         unique_processed_tweets = []
         for tweet in processed_tweets:
-            url = tweet.get("article_url")
+            url = tweet.get("url")
             if url:
                 if url in seen_urls:
                     continue
@@ -382,21 +382,21 @@ def ingest_fresh_tweets(target_account, mongo_collection):
 
         processed_tweets = unique_processed_tweets
 
-        # Deduplicate based on article_url:
-        # If a tweet in the new batch has an article_url that already exists in the DB,
+        # Deduplicate based on url:
+        # If a tweet in the new batch has an url that already exists in the DB,
         # delete the existing document(s) in the DB to allow the new one to take precedence.
         # This ensures we don't have multiple tweets pointing to the same article,
         # and we prefer the latest tweet (assuming fresh ingest is newer).
-        article_urls = [
-            t.get("article_url") for t in processed_tweets if t.get("article_url")
+        urls = [
+            t.get("url") for t in processed_tweets if t.get("url")
         ]
-        if article_urls:
+        if urls:
             delete_result = collection.delete_many(
-                {"article_url": {"$in": article_urls}}
+                {"url": {"$in": urls}}
             )
             if delete_result.deleted_count > 0:
                 print(
-                    f"Deleted {delete_result.deleted_count} existing documents with duplicate article_urls."
+                    f"Deleted {delete_result.deleted_count} existing documents with duplicate urls."
                 )
 
         # Insert all tweets at once

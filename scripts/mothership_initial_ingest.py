@@ -46,7 +46,7 @@ def extract_tweet_fields(tweet):
     # Safely extract article URL (first URL if exists) and expand it
     urls_list = tweet.get("entities", {}).get("urls", [])
     short_url = urls_list[0].get("expanded_url") if urls_list else None
-    article_url = expand_url(short_url) if short_url else None
+    url = expand_url(short_url) if short_url else None
 
     return {
         # Use tweet ID as MongoDB _id to prevent duplicates
@@ -65,7 +65,7 @@ def extract_tweet_fields(tweet):
         # Media content
         "cover_image": cover_image,
         # News article link
-        "article_url": article_url,
+        "url": url,
     }
 
 
