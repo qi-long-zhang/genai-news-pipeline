@@ -1,5 +1,6 @@
+import json
 import scrapy
-from datetime import timedelta, timezone
+from datetime import timedelta, timezone, datetime
 from dateutil import parser
 from pymongo import MongoClient
 from urllib.parse import urljoin
@@ -16,26 +17,32 @@ class MothershipSpider(scrapy.Spider):
         mongo_db = self.settings.get("MONGO_DATABASE")
         mongo_collection = self.name
 
-        query = {"needs_scraping": True, "url": {"$exists": True, "$ne": None}}
+        self.page = 1
+        self.cutoff_date = datetime.now(timezone.utc) - timedelta(days=3)
+        self.existing_articles = {}
 
-        with MongoClient(mongo_uri) as client:
+        with MongoClient(mongo_uri, tz_aware=True) as client:
             collection = client[mongo_db][mongo_collection]
-            for doc in collection.find(query):
-                url = doc.get("url")
-                _id = doc.get("_id")
-                if not url:
-                    continue
+            cursor = collection.find(
+                {"publish_date": {"$gte": self.cutoff_date}},
+                projection={"_id": 1, "publish_date": 1, "update_date": 1},
+            )
+            for doc in cursor:
+                p_date = doc.get("publish_date")  # UTC
+                u_date = doc.get("update_date")  # UTC
+                if p_date and u_date:
+                    self.existing_articles[doc["_id"]] = {
+                        "publish_date": p_date,
+                        "update_date": u_date,
+                    }
 
-                yield scrapy.Request(
-                    url=url,
-                    headers={"Referer": "https://mothership.sg/"},
-                    meta={"cloudscraper": True, "_id": _id, "url": url},
-                )
+        yield scrapy.Request(
+            url=f"https://mothership.sg/json/posts-{self.page}.json",
+            headers={"Referer": "https://mothership.sg/"},
+            meta={"cloudscraper": True},
+        )
 
     def parse(self, response):
-        def _clean(value):
-            return value.strip() if value else None
-
         def _parse_date(date_str):
             if not date_str:
                 return None
@@ -44,21 +51,60 @@ class MothershipSpider(scrapy.Spider):
                 dt = dt.replace(tzinfo=timezone(timedelta(hours=8)))
             return dt.astimezone(timezone.utc)
 
-        item = NewsArticleItem()
-        item["_id"] = response.meta.get("_id")
-        item["url"] = response.meta.get("url")
+        data = json.loads(response.text)
 
-        head = response.css("div.article-head")
-        item["title"] = _clean(head.css("h1.title::text").get())
-        item["subtitle"] = _clean(head.css("p.sub-title::text").get())
+        for article in data:
+            date = _parse_date(article.get("date"))  # UTC
+            if date and date < self.cutoff_date:  # UTC compare
+                return
 
-        author_time = head.css("div.author-time")
-        item["author"] = _clean(
-            author_time.css("a[href='#author'].underline::text").get()
+            article_id = article.get("name")
+            if article_id in self.existing_articles:
+                existing_update_date = self.existing_articles[article_id][
+                    "update_date"
+                ]  # UTC
+                if date == existing_update_date:  # UTC compare
+                    continue
+
+            item = NewsArticleItem()
+            item["_id"] = article_id
+            item["url"] = article.get("url")
+
+            item["title"] = article.get("title")
+            item["subtitle"] = article.get("excerpt")
+            item["cover_image"] = article.get("image_url")
+            if article_id in self.existing_articles:
+                item["publish_date"] = self.existing_articles[article_id][
+                    "publish_date"
+                ]
+            else:
+                item["publish_date"] = date  # UTC
+            item["update_date"] = date  # UTC
+
+            yield scrapy.Request(
+                item["url"],
+                self.parse_article,
+                meta={"cloudscraper": True, "item": item},
+            )
+
+        next_page = self.page + 1
+        next_url = response.url.replace(
+            f"posts-{self.page}.json", f"posts-{next_page}.json"
         )
-        publish_date_str = _clean(author_time.css("div.time h3::text").get())
-        item["publish_date"] = _parse_date(publish_date_str)  # UTC
-        item["update_date"] = item["publish_date"]  # UTC
+        self.page = next_page
+        yield scrapy.Request(next_url, self.parse)
+
+    def parse_article(self, response):
+        def _clean(value):
+            return value.strip() if value else None
+
+        item = response.meta["item"]
+
+        item["author"] = _clean(
+            response.css(
+                "div.article-head div.author-time a[href='#author'].underline::text"
+            ).get()
+        )
 
         content_section = response.css("div.content")
 
