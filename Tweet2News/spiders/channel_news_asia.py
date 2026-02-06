@@ -44,26 +44,26 @@ class ChannelNewsAsiaSpider(scrapy.Spider):
         def _parse_date(date_str):
             if not date_str:
                 return None
-            return parser.parse(date_str)
+            dt = parser.parse(date_str)
+            if dt.tzinfo is None:
+                dt = dt.replace(tzinfo=timezone(timedelta(hours=8)))
+            return dt.astimezone(timezone.utc)
 
         data = json.loads(response.text)
-
         articles = data.get("result") or []
-        if not articles:
-            return
 
         for article in articles:
             if article.get("type") != "article":
                 continue
 
-            date = _parse_date(article.get("date"))  # SGT
-            if date and date < self.cutoff_date:  # SGT compare with UTC
+            date = _parse_date(article.get("date"))  # UTC
+            if date and date < self.cutoff_date:  # UTC compare
                 return
 
             article_id = article.get("uuid")
             if article_id in self.existing_articles:
                 existing_update_date = self.existing_articles[article_id]  # UTC
-                if date == existing_update_date:  # SGT compare with UTC
+                if date == existing_update_date:  # UTC compare
                     continue
 
             item = NewsArticleItem()
