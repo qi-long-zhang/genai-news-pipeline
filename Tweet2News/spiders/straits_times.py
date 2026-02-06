@@ -100,6 +100,9 @@ class StraitsTimesSpider(scrapy.Spider):
         yield scrapy.Request(next_url, self.parse)
 
     def parse_article(self, response):
+        def _clean(value):
+            return value.strip() if value else None
+
         item = response.meta["item"]
 
         item["subtitle"] = response.css(
@@ -110,7 +113,7 @@ class StraitsTimesSpider(scrapy.Spider):
             '[data-testid="masthead-author-byline-test-id"] p.font-eyebrow-lg-bold::text'
         ).get()
 
-        summary_container = response.css('div[data-testid="aisummary-test-id"]')
+        summary_container = _clean(response.css('div[data-testid="aisummary-test-id"]'))
         if summary_container:
             item["summary"] = summary_container.css("li").xpath("string(.)").getall()
 
@@ -121,7 +124,7 @@ class StraitsTimesSpider(scrapy.Spider):
         content = []
         for node in content_nodes:
             tag = node.xpath("name()").get()
-            text = node.xpath("string(.)").get()
+            text = _clean(node.xpath("string(.)").get())
             if text:
                 content.append({"tag": tag, "text": text})
         item["content"] = content
@@ -129,15 +132,17 @@ class StraitsTimesSpider(scrapy.Spider):
         images = item["images"]
         image_nodes = response.css('figure[data-testid="inline-media-test-id"]')
         for node in image_nodes:
-            img_url = node.css("img::attr(src)").get()
+            img_url = _clean(node.css("img::attr(src)").get())
             if not img_url:
                 continue
             caption = node.css(
                 "figcaption p[data-testid='inline-media-caption-test-id']::text"
             ).get()
-            credit = node.css(
-                "figcaption p[data-testid='inline-media-credit-test-id']::text"
-            ).get()
+            credit = _clean(
+                node.css(
+                    "figcaption p[data-testid='inline-media-credit-test-id']::text"
+                ).get()
+            )
             image = {"url": img_url, "caption": caption}
             if credit:
                 image["credit"] = credit
@@ -149,7 +154,7 @@ class StraitsTimesSpider(scrapy.Spider):
             'div[data-testid="social-media-embed-test-id"] iframe'
         )
         for frame in video_frames:
-            src = frame.css("::attr(src)").get()
+            src = _clean(frame.css("::attr(src)").get())
             if src and ("youtube.com" in src or "youtu.be" in src):
                 videos.append(src)
         item["videos"] = videos
@@ -161,7 +166,7 @@ class StraitsTimesSpider(scrapy.Spider):
         )
         excluded_substrings = ["newsletter-signup", "headstart-signup"]
         for node in link_nodes:
-            raw_url = node.css("::attr(href)").get()
+            raw_url = _clean(node.css("::attr(href)").get())
             text = node.xpath("string(.)").get()
             if not raw_url or any(ex in raw_url for ex in excluded_substrings):
                 continue
