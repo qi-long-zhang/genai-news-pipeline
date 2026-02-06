@@ -113,7 +113,7 @@ class StraitsTimesSpider(scrapy.Spider):
             '[data-testid="masthead-author-byline-test-id"] p.font-eyebrow-lg-bold::text'
         ).get()
 
-        summary_container = _clean(response.css('div[data-testid="aisummary-test-id"]'))
+        summary_container = response.css('div[data-testid="aisummary-test-id"]')
         if summary_container:
             item["summary"] = summary_container.css("li").xpath("string(.)").getall()
 
