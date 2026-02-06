@@ -95,6 +95,9 @@ class MothershipSpider(scrapy.Spider):
         yield scrapy.Request(next_url, self.parse)
 
     def parse_article(self, response):
+        def _clean(value):
+            return value.strip() if value else None
+
         item = response.meta["item"]
 
         item["author"] = response.css(
@@ -110,7 +113,7 @@ class MothershipSpider(scrapy.Spider):
         for text_node in text_nodes:
             tag = text_node.root.tag
             all_text = text_node.xpath(".//text()[not(ancestor::figure)]").getall()
-            text = " ".join(cleaned for t in all_text if (cleaned := t.strip()))
+            text = " ".join(cleaned for t in all_text if (cleaned := _clean(t)))
             if tag in {"h2", "h3"} and text and "Related" in text:
                 continue
             if text:
@@ -118,13 +121,15 @@ class MothershipSpider(scrapy.Spider):
         item["content"] = content
 
         images = []
-        featured_image_url = response.css("div.image.featured img::attr(src)").get()
+        featured_image_url = _clean(
+            response.css("div.image.featured img::attr(src)").get()
+        )
         if featured_image_url:
             images.append({"url": featured_image_url, "caption": ""})
 
         image_nodes = content_section.css("figure")
         for img_node in image_nodes:
-            img_url = img_node.css("img::attr(src)").get()
+            img_url = _clean(img_node.css("img::attr(src)").get())
             caption = img_node.xpath("normalize-space(.//figcaption)").get()
             if img_url:
                 images.append({"url": img_url, "caption": caption})
@@ -135,7 +140,7 @@ class MothershipSpider(scrapy.Spider):
             "iframe[src*='youtube.com'], iframe[src*='youtu.be']"
         )
         for vid_node in video_nodes:
-            vid_url = vid_node.css("::attr(src)").get()
+            vid_url = _clean(vid_node.css("::attr(src)").get())
             if vid_url:
                 videos.append(vid_url)
         item["videos"] = videos
@@ -144,7 +149,7 @@ class MothershipSpider(scrapy.Spider):
         links = []
         link_nodes = content_section.css("a[href]")
         for link_node in link_nodes:
-            link_url = link_node.css("::attr(href)").get()
+            link_url = _clean(link_node.css("::attr(href)").get())
             link_text = link_node.css("::text").get()
             if not link_url or link_url in excluded_links:
                 continue
@@ -161,7 +166,7 @@ class MothershipSpider(scrapy.Spider):
         embeds = []
         embed_nodes = content_section.css("iframe[src^='/']")
         for embed_node in embed_nodes:
-            embed_url = embed_node.css("::attr(src)").get()
+            embed_url = _clean(embed_node.css("::attr(src)").get())
             if embed_url:
                 embeds.append(urljoin(response.url, embed_url))
         item["embeds"] = embeds
