@@ -1,5 +1,6 @@
 import scrapy
-from datetime import timedelta, timezone
+from datetime import timedelta, timezone, datetime
+import json
 from dateutil import parser
 from pymongo import MongoClient
 
@@ -15,25 +16,27 @@ class StraitsTimesSpider(scrapy.Spider):
         mongo_db = self.settings.get("MONGO_DATABASE")
         mongo_collection = self.name
 
-        query = {"needs_scraping": True}
+        self.page = 1
+        self.cutoff_date = datetime.now(timezone.utc) - timedelta(days=3)
+        self.max_date = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%S.000Z")
+        self.existing_articles = {}
 
-        with MongoClient(mongo_uri) as client:
+        with MongoClient(mongo_uri, tz_aware=True) as client:
             collection = client[mongo_db][mongo_collection]
-            for doc in collection.find(query):
-                url = doc.get("article", {}).get("url")
-                _id = doc.get("_id")
-                if not url:
-                    continue
+            cursor = collection.find(
+                {"publish_date": {"$gte": self.cutoff_date}},
+                projection={"_id": 1, "update_date": 1},
+            )
+            for doc in cursor:
+                u_date = doc.get("update_date")  # UTC
+                if u_date:
+                    self.existing_articles[doc["_id"]] = u_date
 
-                yield scrapy.Request(
-                    url=url,
-                    meta={"_id": _id, "url": url},
-                )
+        yield scrapy.Request(
+            f"https://www.straitstimes.com/_plat/api/v1/articlesListing?pageType=section&searchParam=singapore&page={self.page}&maxDate={self.max_date}"
+        )
 
     def parse(self, response):
-        def _clean(value):
-            return value.replace("\xa0", " ").strip() if value else None
-
         def _parse_date(date_str):
             if not date_str:
                 return None
@@ -42,13 +45,65 @@ class StraitsTimesSpider(scrapy.Spider):
                 dt = dt.replace(tzinfo=timezone(timedelta(hours=8)))
             return dt.astimezone(timezone.utc)
 
-        item = NewsArticleItem()
-        item["_id"] = response.meta.get("_id")
-        item["url"] = response.meta.get("url")
+        data = json.loads(response.text)
+        articles = data.get("cards") or []
 
-        item["title"] = _clean(
-            response.css('h1[data-testid="heading-test-id"]::text').get()
-        )
+        for article in articles:
+            article = article.get("articleCard")
+            if not article:
+                continue
+
+            media = article.get("media")
+            if (
+                not media
+                or not media[0].get("image")
+                or not media[0]["image"].get("src")
+            ):
+                continue
+
+            publish_date = _parse_date(article.get("publishedDate"))  # UTC
+            if publish_date and publish_date < self.cutoff_date:  # UTC compare
+                return
+
+            article_id = article.get("urlPath")
+            update_date = _parse_date(article.get("updatedDate"))  # UTC
+            if article_id in self.existing_articles:
+                existing_update_date = self.existing_articles[article_id]  # UTC
+                if update_date == existing_update_date:  # UTC compare
+                    continue
+
+            item = NewsArticleItem()
+            item["_id"] = article_id
+            item["url"] = f"https://www.straitstimes.com{article_id}"
+
+            item["title"] = article.get("title")
+            item["cover_image"] = media[0]["image"]["src"]
+            item["images"] = [
+                {
+                    "url": media[0]["image"]["src"],
+                    "caption": media[0]["image"]["caption"],
+                    "credit": media[0]["image"]["credit"],
+                }
+            ]
+            item["publish_date"] = publish_date  # UTC
+            item["update_date"] = update_date  # UTC
+
+            yield scrapy.Request(
+                item["url"],
+                self.parse_article,
+                meta={"cloudscraper": True, "item": item},
+            )
+
+        next_page = self.page + 1
+        next_url = response.url.replace(f"page={self.page}", f"page={next_page}")
+        self.page = next_page
+        yield scrapy.Request(next_url, self.parse)
+
+    def parse_article(self, response):
+        def _clean(value):
+            return value.replace("\xa0", " ").strip() if value else None
+
+        item = response.meta["item"]
 
         item["subtitle"] = _clean(
             response.css(
@@ -61,19 +116,6 @@ class StraitsTimesSpider(scrapy.Spider):
                 '[data-testid="masthead-author-byline-test-id"] p.font-eyebrow-lg-bold::text'
             ).get()
         )
-
-        timestamp_elements = response.css('div[data-testid="timestamp-test-id"]')
-        for element in timestamp_elements:
-            raw_text = "".join(element.css("p::text").getall())
-            if "Published" in raw_text:
-                item["publish_date"] = _parse_date(
-                    _clean(raw_text.replace("Published", ""))
-                )  # UTC
-                item["update_date"] = item["publish_date"]  # UTC
-            elif "Updated" in raw_text:
-                item["update_date"] = _parse_date(
-                    _clean(raw_text.replace("Updated", ""))
-                )  # UTC
 
         summary_container = response.css('div[data-testid="aisummary-test-id"]')
         if summary_container:
@@ -95,31 +137,25 @@ class StraitsTimesSpider(scrapy.Spider):
                 content.append({"tag": tag, "text": text})
         item["content"] = content
 
-        images = []
-        image_nodes = response.css(
-            'div[data-testid="article-hero-media-test-id"], '
-            'figure[data-testid="inline-media-test-id"]'
-        )
+        images = item["images"]
+        image_nodes = response.css('figure[data-testid="inline-media-test-id"]')
         for node in image_nodes:
-            img_url = _clean(
-                (
-                    node.css("img::attr(src)").get()
-                    or (
-                        response.css('meta[property="og:image"]::attr(content)').get()
-                        if node.attrib.get("data-testid")
-                        == "article-hero-media-test-id"
-                        else None
-                    )
-                )
-            )
+            img_url = _clean((node.css("img::attr(src)").get()))
             if not img_url:
                 continue
-            caption_list = []
-            for cap in node.css(".hero-media-caption p, figcaption p"):
-                text = _clean(cap.xpath("string(.)").get())
-                if text:
-                    caption_list.append(text)
-            images.append({"url": img_url, "caption": caption_list})
+            # Extract caption from figcaption
+            caption = node.css(
+                "figcaption p[data-testid='inline-media-caption-test-id']::text"
+            ).get()
+
+            # Extract credit from figcaption
+            credit = node.css(
+                "figcaption p[data-testid='inline-media-credit-test-id']::text"
+            ).get()
+            image = {"url": img_url, "caption": caption}
+            if credit:
+                image["credit"] = credit
+            images.append(image)
         item["images"] = images
 
         videos = []
