@@ -159,9 +159,9 @@ class ChannelNewsAsiaSpider(scrapy.Spider):
                 videos.append(vid_url)
         brightcove_nodes = content_section.css("video-js")
         for bc_node in brightcove_nodes:
-            data_account = _clean(bc_node.css("::attr(data-account)").get())
-            data_player = _clean(bc_node.css("::attr(data-player)").get())
-            data_video_id = _clean(bc_node.css("::attr(data-video-id)").get())
+            data_account = bc_node.css("::attr(data-account)").get()
+            data_player = bc_node.css("::attr(data-player)").get()
+            data_video_id = bc_node.css("::attr(data-video-id)").get()
             if data_account and data_player and data_video_id:
                 bc_url = (
                     f"https://players.brightcove.net/{data_account}/"
@@ -179,7 +179,7 @@ class ChannelNewsAsiaSpider(scrapy.Spider):
         for node in content_nodes:
             a_nodes = node.css("a")
             for a_node in a_nodes:
-                raw_url = _clean(a_node.css("::attr(href)").get())
+                raw_url = a_node.css("::attr(href)").get()
                 text = a_node.xpath("string(.)").get()
                 if not raw_url or raw_url.startswith(("javascript:", "mailto:", "#")):
                     continue
