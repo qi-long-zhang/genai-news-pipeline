@@ -15,12 +15,12 @@ class StraitsTimesSpider(scrapy.Spider):
         mongo_db = self.settings.get("MONGO_DATABASE")
         mongo_collection = self.name
 
-        query = {"needs_scraping": True, "url": {"$exists": True, "$ne": None}}
+        query = {"needs_scraping": True}
 
         with MongoClient(mongo_uri) as client:
             collection = client[mongo_db][mongo_collection]
             for doc in collection.find(query):
-                url = doc.get("url")
+                url = doc.get("article", {}).get("url")
                 _id = doc.get("_id")
                 if not url:
                     continue
