@@ -19,7 +19,7 @@ class ChannelNewsAsiaSpider(scrapy.Spider):
         mongo_collection = self.name
 
         self.page = 0
-        self.cutoff_date = datetime.now(timezone.utc) - timedelta(days=7)
+        self.cutoff_date = datetime.now(timezone.utc) - timedelta(days=3)
         self.existing_articles = {}
 
         with MongoClient(mongo_uri, tz_aware=True) as client:
