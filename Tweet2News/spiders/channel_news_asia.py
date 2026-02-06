@@ -117,12 +117,10 @@ class ChannelNewsAsiaSpider(scrapy.Spider):
         publish_date = article_publish.css("::text").get()
         item["publish_date"] = _parse_date(_clean(publish_date))  # UTC
         item["update_date"] = item["publish_date"]  # UTC
-        update_date = article_publish.css("span::text").get()
+        update_date = _clean(article_publish.css("span::text").get())
         if update_date:
-            cleaned_update_date = _clean(
-                update_date.replace("(Updated:", "").replace(")", "")
-            )
-            item["update_date"] = _parse_date(cleaned_update_date)  # UTC
+            update_date = update_date.replace("(Updated:", "").replace(")", "")
+            item["update_date"] = _parse_date(update_date)  # UTC
 
         content = []
         content_nodes = content_section.xpath(
@@ -135,7 +133,7 @@ class ChannelNewsAsiaSpider(scrapy.Spider):
         )
         for node in content_nodes:
             tag = node.root.tag
-            text = node.xpath("string(.)").get()
+            text = _clean(node.xpath("string(.)").get())
             if text:
                 content.append({"type": tag, "text": text})
         item["content"] = content
@@ -143,7 +141,7 @@ class ChannelNewsAsiaSpider(scrapy.Spider):
         images = []
         image_nodes = content_section.css("figure")
         for img_node in image_nodes:
-            img_url = img_node.css("img::attr(src)").get()
+            img_url = _clean(img_node.css("img::attr(src)").get())
             caption = img_node.xpath("normalize-space(.//figcaption)").get()
             if img_url:
                 images.append({"url": img_url, "caption": caption})
@@ -154,14 +152,14 @@ class ChannelNewsAsiaSpider(scrapy.Spider):
             "iframe[src*='youtube.com'], iframe[src*='youtu.be']"
         )
         for vid_node in youtube_nodes:
-            vid_url = vid_node.css("::attr(src)").get()
+            vid_url = _clean(vid_node.css("::attr(src)").get())
             if vid_url:
                 videos.append(vid_url)
         brightcove_nodes = content_section.css("video-js")
         for bc_node in brightcove_nodes:
-            data_account = bc_node.css("::attr(data-account)").get()
-            data_player = bc_node.css("::attr(data-player)").get()
-            data_video_id = bc_node.css("::attr(data-video-id)").get()
+            data_account = _clean(bc_node.css("::attr(data-account)").get())
+            data_player = _clean(bc_node.css("::attr(data-player)").get())
+            data_video_id = _clean(bc_node.css("::attr(data-video-id)").get())
             if data_account and data_player and data_video_id:
                 bc_url = (
                     f"https://players.brightcove.net/{data_account}/"
@@ -171,15 +169,15 @@ class ChannelNewsAsiaSpider(scrapy.Spider):
         item["videos"] = videos
 
         item["source"] = "CNA"
-        source = content_section.css(".source.source--with-label::text").get()
+        source = _clean(content_section.css(".source.source--with-label::text").get())
         if source:
-            source.replace("Source:", "")
+            item["source"] = source.replace("Source:", "")
 
         links = []
         for node in content_nodes:
             a_nodes = node.css("a")
             for a_node in a_nodes:
-                raw_url = a_node.css("::attr(href)").get()
+                raw_url = _clean(a_node.css("::attr(href)").get())
                 text = a_node.xpath("string(.)").get()
                 if not raw_url or raw_url.startswith(("javascript:", "mailto:", "#")):
                     continue
@@ -193,7 +191,7 @@ class ChannelNewsAsiaSpider(scrapy.Spider):
         embeds = []
         embed_nodes = content_section.css("blockquote.instagram-media")
         for embed_node in embed_nodes:
-            embed_url = embed_node.css("::attr(data-instgrm-permalink)").get()
+            embed_url = _clean(embed_node.css("::attr(data-instgrm-permalink)").get())
             if embed_url:
                 embeds.append(embed_url)
         item["embeds"] = embeds
