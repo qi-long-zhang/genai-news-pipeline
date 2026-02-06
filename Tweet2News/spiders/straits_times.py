@@ -100,30 +100,19 @@ class StraitsTimesSpider(scrapy.Spider):
         yield scrapy.Request(next_url, self.parse)
 
     def parse_article(self, response):
-        def _clean(value):
-            return value.replace("\xa0", " ").strip() if value else None
-
         item = response.meta["item"]
 
-        item["subtitle"] = _clean(
-            response.css(
-                'div[data-testid="headline-stack-test-id"] p.font-body-baseline-regular[data-testid="paragraph-test-id"]::text'
-            ).get()
-        )
+        item["subtitle"] = response.css(
+            'div[data-testid="headline-stack-test-id"] p.font-body-baseline-regular[data-testid="paragraph-test-id"]::text'
+        ).get()
 
-        item["author"] = _clean(
-            response.css(
-                '[data-testid="masthead-author-byline-test-id"] p.font-eyebrow-lg-bold::text'
-            ).get()
-        )
+        item["author"] = response.css(
+            '[data-testid="masthead-author-byline-test-id"] p.font-eyebrow-lg-bold::text'
+        ).get()
 
         summary_container = response.css('div[data-testid="aisummary-test-id"]')
         if summary_container:
-            raw_bullets = summary_container.css("li").xpath("string(.)").getall()
-            summary_list = [_clean(t) for t in raw_bullets if _clean(t)]
-            item["summary"] = summary_list if summary_list else None
-        else:
-            item["summary"] = None
+            item["summary"] = summary_container.css("li").xpath("string(.)").getall()
 
         content_nodes = response.css(
             'p[data-testid="article-paragraph-annotation-test-id"], '
@@ -132,7 +121,7 @@ class StraitsTimesSpider(scrapy.Spider):
         content = []
         for node in content_nodes:
             tag = node.xpath("name()").get()
-            text = _clean(node.xpath("string(.)").get())
+            text = node.xpath("string(.)").get()
             if text:
                 content.append({"tag": tag, "text": text})
         item["content"] = content
@@ -140,15 +129,12 @@ class StraitsTimesSpider(scrapy.Spider):
         images = item["images"]
         image_nodes = response.css('figure[data-testid="inline-media-test-id"]')
         for node in image_nodes:
-            img_url = _clean((node.css("img::attr(src)").get()))
+            img_url = node.css("img::attr(src)").get()
             if not img_url:
                 continue
-            # Extract caption from figcaption
             caption = node.css(
                 "figcaption p[data-testid='inline-media-caption-test-id']::text"
             ).get()
-
-            # Extract credit from figcaption
             credit = node.css(
                 "figcaption p[data-testid='inline-media-credit-test-id']::text"
             ).get()
@@ -163,7 +149,7 @@ class StraitsTimesSpider(scrapy.Spider):
             'div[data-testid="social-media-embed-test-id"] iframe'
         )
         for frame in video_frames:
-            src = _clean(frame.css("::attr(src)").get())
+            src = frame.css("::attr(src)").get()
             if src and ("youtube.com" in src or "youtu.be" in src):
                 videos.append(src)
         item["videos"] = videos
@@ -175,8 +161,8 @@ class StraitsTimesSpider(scrapy.Spider):
         )
         excluded_substrings = ["newsletter-signup", "headstart-signup"]
         for node in link_nodes:
-            raw_url = _clean(node.css("::attr(href)").get())
-            text = _clean(node.xpath("string(.)").get())
+            raw_url = node.css("::attr(href)").get()
+            text = node.xpath("string(.)").get()
             if not raw_url or any(ex in raw_url for ex in excluded_substrings):
                 continue
             clean_url = response.urljoin(raw_url.split("?")[0])
@@ -184,14 +170,8 @@ class StraitsTimesSpider(scrapy.Spider):
             links.append({"url": clean_url, "text": text, "is_internal": is_internal})
         item["links"] = links
 
-        topics = []
-        topic_nodes = response.css(
-            'div[data-testid="tags-test-id"] p[data-testid="topic-tag-content-test-id"]'
-        )
-        for node in topic_nodes:
-            topic_text = _clean(node.xpath("string(.)").get())
-            if topic_text:
-                topics.append(topic_text)
-        item["topics"] = topics
+        item["topics"] = response.css(
+            'div[data-testid="tags-test-id"] p[data-testid="topic-tag-content-test-id"]::text'
+        ).getall()
 
         yield item
