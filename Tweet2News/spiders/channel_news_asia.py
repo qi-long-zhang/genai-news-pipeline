@@ -86,6 +86,7 @@ class ChannelNewsAsiaSpider(scrapy.Spider):
             )
 
             item["cover_image"] = article.get("img_extra", {}).get("original")
+            item["update_date"] = date
 
             yield scrapy.Request(
                 item["url"],
@@ -114,14 +115,8 @@ class ChannelNewsAsiaSpider(scrapy.Spider):
 
         content_section = response.css("div.content")
 
-        article_publish = content_section.css(".article-publish")
-        publish_date = article_publish.css("::text").get()
-        item["publish_date"] = _parse_date(_clean(publish_date))  # UTC
-        item["update_date"] = item["publish_date"]  # UTC
-        update_date = _clean(article_publish.css("span::text").get())
-        if update_date:
-            update_date = update_date.replace("(Updated:", "").replace(")", "")
-            item["update_date"] = _parse_date(update_date)  # UTC
+        publish_date = _clean(content_section.css(".article-publish::text").get())
+        item["publish_date"] = _parse_date(publish_date)
 
         content = []
         content_nodes = content_section.xpath(
@@ -136,7 +131,7 @@ class ChannelNewsAsiaSpider(scrapy.Spider):
             tag = node.root.tag
             text = _clean(node.xpath("string(.)").get())
             if text:
-                content.append({"type": tag, "text": text})
+                content.append({"tag": tag, "text": text})
         item["content"] = content
 
         images = []

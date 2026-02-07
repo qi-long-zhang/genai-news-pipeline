@@ -91,14 +91,19 @@ class MongoPipeline:
                 hours=24
             )
 
+        set_fields = {
+            f"article.{field}": value
+            for field, value in article.items()
+            if field != "publish_date"
+        }
+        set_fields["needs_scraping"] = False
+        set_fields["needs_enrichment"] = needs_enrichment
+
         update = UpdateOne(
             {"_id": document_id},
             {
-                "$set": {
-                    "article": article,
-                    "needs_scraping": False,
-                    "needs_enrichment": needs_enrichment,
-                }
+                "$set": set_fields,
+                "$setOnInsert": {"article.publish_date": article.get("publish_date")},
             },
             upsert=True,
         )
