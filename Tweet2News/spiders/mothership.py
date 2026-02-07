@@ -24,12 +24,17 @@ class MothershipSpider(scrapy.Spider):
         with MongoClient(mongo_uri, tz_aware=True) as client:
             collection = client[mongo_db][mongo_collection]
             cursor = collection.find(
-                {"publish_date": {"$gte": self.cutoff_date}},
-                projection={"_id": 1, "publish_date": 1, "update_date": 1},
+                {"article.publish_date": {"$gte": self.cutoff_date}},
+                projection={
+                    "_id": 1,
+                    "article.publish_date": 1,
+                    "article.update_date": 1,
+                },
             )
             for doc in cursor:
-                p_date = doc.get("publish_date")  # UTC
-                u_date = doc.get("update_date")  # UTC
+                article_data = doc.get("article", {})
+                p_date = article_data.get("publish_date")  # UTC
+                u_date = article_data.get("update_date")  # UTC
                 if p_date and u_date:
                     self.existing_articles[doc["_id"]] = {
                         "publish_date": p_date,

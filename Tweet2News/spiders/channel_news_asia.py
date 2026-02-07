@@ -25,11 +25,12 @@ class ChannelNewsAsiaSpider(scrapy.Spider):
         with MongoClient(mongo_uri, tz_aware=True) as client:
             collection = client[mongo_db][mongo_collection]
             cursor = collection.find(
-                {"publish_date": {"$gte": self.cutoff_date}},
-                projection={"_id": 1, "update_date": 1},
+                {"article.publish_date": {"$gte": self.cutoff_date}},
+                projection={"_id": 1, "article.update_date": 1},
             )
             for doc in cursor:
-                u_date = doc.get("update_date")  # UTC
+                article_data = doc.get("article", {})
+                u_date = article_data.get("update_date")  # UTC
                 if u_date:
                     self.existing_articles[doc["_id"]] = u_date
 
