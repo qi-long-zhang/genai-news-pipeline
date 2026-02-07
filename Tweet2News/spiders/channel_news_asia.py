@@ -49,6 +49,8 @@ class ChannelNewsAsiaSpider(scrapy.Spider):
 
         data = json.loads(response.text)
         articles = data.get("result") or []
+        if not articles:
+            return
 
         for article in articles:
             if article.get("type") != "article":

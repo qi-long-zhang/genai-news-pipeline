@@ -48,6 +48,8 @@ class StraitsTimesSpider(scrapy.Spider):
 
         data = json.loads(response.text)
         articles = data.get("cards") or []
+        if not articles:
+            return
 
         for article in articles:
             article = article.get("articleCard")
@@ -76,6 +78,7 @@ class StraitsTimesSpider(scrapy.Spider):
             item = NewsArticleItem()
             item["_id"] = article_id
             item["url"] = f"https://www.straitstimes.com{article_id}"
+            item["source"] = "The Straits Times"
 
             item["title"] = article.get("title")
             item["cover_image"] = media[0]["image"]["src"]

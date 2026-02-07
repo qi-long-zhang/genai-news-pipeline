@@ -57,6 +57,8 @@ class MothershipSpider(scrapy.Spider):
             return dt.astimezone(timezone.utc)
 
         data = json.loads(response.text)
+        if not data:
+            return
 
         for article in data:
             date = _parse_date(article.get("date"))  # UTC
@@ -74,6 +76,7 @@ class MothershipSpider(scrapy.Spider):
             item = NewsArticleItem()
             item["_id"] = article_id
             item["url"] = article.get("url")
+            item["source"] = "Mothership"
 
             item["title"] = article.get("title")
             item["subtitle"] = article.get("excerpt")
