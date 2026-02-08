@@ -158,8 +158,8 @@ class MothershipSpider(scrapy.Spider):
         link_nodes = content_section.css("a[href]")
         for link_node in link_nodes:
             link_url = _clean(link_node.css("::attr(href)").get())
-            link_text = _clean(link_node.css("::text").get()) or ""
-            if not link_url or link_url in excluded_links:
+            link_text = _clean(link_node.css("::text").get())
+            if not link_url or link_url in excluded_links or not link_text:
                 continue
             if "email-protection" in link_url or "[email" in link_text:
                 continue
