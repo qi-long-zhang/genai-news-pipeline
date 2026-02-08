@@ -88,7 +88,7 @@ class MongoPipeline:
         needs_enrichment = False
         if isinstance(publish_date, datetime):
             needs_enrichment = datetime.now(timezone.utc) - publish_date <= timedelta(
-                hours=24
+                hours=36
             )
 
         update = UpdateOne(
