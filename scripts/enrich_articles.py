@@ -165,6 +165,7 @@ def process_collection(mongo_collection):
                 "embedding": {
                     "text": formatted_text,
                     "vector": embeddings[j],
+                    "embedded_at": datetime.now(timezone.utc),  # UTC
                 },
                 "needs_enrichment": False,
                 "needs_aggregation": True,
