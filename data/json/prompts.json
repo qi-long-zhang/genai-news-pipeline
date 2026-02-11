@@ -1,0 +1,56 @@
+{
+  "prompts": [
+    {
+      "technique": "Chain-of-Verification (CoVe)",
+      "input_fields": {
+        "headline": false,
+        "subhead": false,
+        "paragraphs": true,
+        "topic": true,
+        "source": false,
+        "rationale": "Headline/subhead excluded so the draft in Stage 1 is generated independently, maximizing the chance of factual discrepancies that Stages 2-3 can catch and correct. Source excluded because it does not aid factual verification and may reduce rigor (the model might verify less carefully for trusted sources). Topic retained to help Stage 1 produce a focused draft with verifiable claims."
+      },
+      "prompt": "You are an expert news summarizer with a rigorous fact-checking process.\n\nHere is the article to summarize:\n\nTopic: {topic}\n\n{content}\n\nComplete the following four stages. Show your work for each stage, then provide the final output.\n\n--- STAGE 1: DRAFT SUMMARY ---\nSummarize the above article in 3-5 sentences. Capture the most newsworthy facts including key names, numbers, dates, and outcomes.\n\n--- STAGE 2: EXTRACT CLAIMS AND GENERATE VERIFICATION QUESTIONS ---\nList every specific factual claim in your draft summary (e.g., \"X said Y\", \"Z increased by N%\"). For each claim, generate a targeted verification question:\n- Names, titles, affiliations: Is [name] correctly identified as [role] at [org]?\n- Numbers, dates, statistics: Is [number/date] accurate?\n- Causal claims: Does the article support that [X] caused/led to [Y]?\n- Events and sequences: Did [event] happen in the order described?\n\n--- STAGE 3: ANSWER AND VERIFY ---\nAnswer each question by referring ONLY to the original article above. For each:\n- Quote or paraphrase the relevant passage from the article\n- State whether your draft is consistent with it\n- If inconsistent, identify the specific error\n\n--- STAGE 4: CORRECTED FINAL SUMMARY ---\nProduce a corrected 3-5 sentence summary that fixes all identified errors. If no errors were found, return the original draft.\n\nOutput the corrected summary after the label below.\n\nFinal Summary:",
+      "reference": "Dhuliawala et al. (2023). Chain-of-Verification Reduces Hallucination in Large Language Models. arXiv:2309.11495"
+    },
+    {
+      "technique": "Meta Prompting",
+      "input_fields": {
+        "headline": false,
+        "subhead": false,
+        "paragraphs": true,
+        "topic": true,
+        "source": true,
+        "rationale": "Headline/subhead excluded to prevent the self-designed prompt from anchoring on them. The model should discover the article's core independently. Topic and source are provided as meta-information to help design the optimal strategy."
+      },
+      "prompt": "You are a meta-cognitive AI assistant specializing in news summarization.\n\nYou will summarize the following article. Before doing so, design the optimal summarization approach for this specific article.\n\nSource: {source}\nTopic: {topic}\n\n{content}\n\n--- STAGE 1: PROMPT DESIGN ---\nAnalyze the article above, then design the ideal summarization prompt for it. Consider:\n- What type of {topic} story is this (breaking news, analysis, feature, opinion)?\n- What is the writing style of {source} and how should the summary adapt?\n- What are the most important elements a reader needs from this article?\n- What common summarization pitfalls should be avoided for this type of article?\n\nWrite your designed prompt as a clear instruction. Your prompt must specify producing a 3-5 sentence summary that is strictly faithful to the article content.\n\n--- STAGE 2: EXECUTE ---\nNow follow your own designed prompt to produce the summary. Base every claim solely on the article above.\n\nFinal Summary:",
+      "reference": "Zhang et al. (2024). Meta-Prompting: Enhancing Language Models with Task-Agnostic Scaffolding. arXiv:2401.12954"
+    },
+    {
+      "technique": "Tree-of-Thought (ToT)",
+      "input_fields": {
+        "headline": false,
+        "subhead": false,
+        "paragraphs": true,
+        "topic": true,
+        "source": false,
+        "rationale": "Headline/subhead excluded so each candidate branch independently identifies the core story without anchoring bias. Source excluded to prevent stylistic bias across candidates. Topic retained to guide relevance evaluation in Step 2."
+      },
+      "prompt": "You are an expert news summarizer. Produce the best possible summary using multi-path reasoning.\n\nTopic: {topic}\n\n{content}\n\n--- STEP 1: GENERATE THREE CANDIDATE SUMMARIES (3-5 sentences each) ---\n\nCandidate A (Event-focused): Center on the main event — what happened, when, where, and the immediate facts.\n\nCandidate B (Impact-focused): Center on the consequences, implications, and why this matters to the public.\n\nCandidate C (Stakeholder-focused): Center on the key people and organizations involved — their actions, statements, and decisions.\n\n--- STEP 2: EVALUATE CANDIDATES ---\nRate each candidate independently (1-5) on the following criteria. Evaluate based on content quality alone — do not favor earlier candidates:\n- Faithfulness: Every claim is supported by the article\n- Completeness: Covers the most important information\n- Coherence: Reads naturally and logically\n- Relevance: Focuses on what matters most for \"{topic}\"\n\nProvide scores and one-line justification per candidate.\n\n--- STEP 3: SYNTHESIZE ---\nCombine the strongest elements from the best-scoring candidates into a single coherent 3-5 sentence summary. Ensure it reads as a natural, flowing narrative — not a patchwork of fragments. Avoid weaknesses identified in Step 2.\n\nFinal Summary:",
+      "reference": "Yao et al. (2023). Tree of Thoughts: Deliberate Problem Solving with Large Language Models. arXiv:2305.10601"
+    },
+    {
+      "technique": "Chain-of-Density (CoD)",
+      "input_fields": {
+        "headline": false,
+        "subhead": false,
+        "paragraphs": true,
+        "topic": false,
+        "source": false,
+        "rationale": "All metadata excluded. CoD's iterative densification must work purely from content — the model discovers entities and importance from the text itself. Including headline/topic would bias which entities are selected first, undermining the organic density-building process."
+      },
+      "prompt": "Article:\n{content}\n\nYou will generate increasingly concise, entity-dense summaries of the above article.\n\nRepeat the following 2 steps 5 times.\n\nStep 1. Identify 1-3 informative entities from the article which are missing from the previously generated summary.\n\nStep 2. Write a new, denser summary of identical length which covers every entity and detail from the previous summary plus the missing entities.\n\nA missing entity is:\n- Relevant to the main story\n- Specific yet concise (5 words or fewer)\n- Novel (not in the previous summary)\n- Faithful (present in the article)\n- Anywhere (located anywhere in the article)\n\nGuidelines:\n- The first summary should be long (4-5 sentences, ~80 words) yet highly non-specific, containing little information beyond the entities marked as missing. Use overly verbose language and fillers (e.g., \"this article discusses\") to reach ~80 words.\n- Make every word count: rewrite the previous summary to improve flow and make space for additional entities.\n- Make space with fusion, compression, and removal of uninformative phrases like \"the article discusses\".\n- The summaries should become highly dense and concise yet self-contained, i.e., easily understood without the article.\n- Missing entities can appear anywhere in the new summary.\n- Never drop entities from the previous summary. If space cannot be made, add fewer new entities.\n\nReturn ONLY the final (5th) summary below.\n\nFinal Summary:",
+      "reference": "Adams et al. (2023). From Sparse to Dense: GPT-4 Summarization with Chain of Density Prompting. arXiv:2309.04269"
+    }
+  ]
+}
