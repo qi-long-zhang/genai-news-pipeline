@@ -56,6 +56,10 @@ class ChannelNewsAsiaSpider(scrapy.Spider):
             if article.get("type") != "article":
                 continue
 
+            article_url = article.get("absolute_url") or ""
+            if "/interactive/" in article_url.lower():
+                continue
+
             date = _parse_date(article.get("date"))  # UTC
             if date and date < self.cutoff_date:  # UTC compare
                 return
@@ -68,7 +72,7 @@ class ChannelNewsAsiaSpider(scrapy.Spider):
 
             item = NewsArticleItem()
             item["_id"] = article_id
-            item["url"] = article.get("absolute_url")
+            item["url"] = article_url
 
             item["title"] = article.get("title")
             description = article.get("description") or ""
