@@ -24,7 +24,7 @@ class MothershipSpider(scrapy.Spider):
         with MongoClient(mongo_uri, tz_aware=True) as client:
             collection = client[mongo_db][mongo_collection]
             cursor = collection.find(
-                {"article.publish_date": {"$gte": self.cutoff_date}},
+                {"article.update_date": {"$gte": self.cutoff_date}},
                 projection={
                     "_id": 1,
                     "article.publish_date": 1,
