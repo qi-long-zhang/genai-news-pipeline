@@ -72,7 +72,7 @@ class StraitsTimesSpider(scrapy.Spider):
             update_date = _parse_date(article.get("updatedDate"))  # UTC
             if article_id in self.existing_articles:
                 existing_update_date = self.existing_articles[article_id]  # UTC
-                if update_date == existing_update_date:  # UTC compare
+                if update_date <= existing_update_date:  # UTC compare
                     continue
 
             item = NewsArticleItem()

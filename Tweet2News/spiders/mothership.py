@@ -70,7 +70,7 @@ class MothershipSpider(scrapy.Spider):
                 existing_update_date = self.existing_articles[article_id][
                     "update_date"
                 ]  # UTC
-                if date == existing_update_date:  # UTC compare
+                if date <= existing_update_date:  # UTC compare
                     continue
 
             item = NewsArticleItem()

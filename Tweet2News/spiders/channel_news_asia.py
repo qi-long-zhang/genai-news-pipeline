@@ -67,7 +67,7 @@ class ChannelNewsAsiaSpider(scrapy.Spider):
             article_id = article.get("uuid")
             if article_id in self.existing_articles:
                 existing_update_date = self.existing_articles[article_id]  # UTC
-                if date == existing_update_date:  # UTC compare
+                if date <= existing_update_date:  # UTC compare
                     continue
 
             item = NewsArticleItem()
