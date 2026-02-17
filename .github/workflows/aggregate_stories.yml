@@ -12,6 +12,7 @@ jobs:
       MONGO_URI: ${{ secrets.MONGO_URI }}
       MONGO_DATABASE: ${{ secrets.MONGO_DATABASE }}
       MONGO_COLLECTIONS: ${{ secrets.MONGO_COLLECTIONS }}
+      GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
