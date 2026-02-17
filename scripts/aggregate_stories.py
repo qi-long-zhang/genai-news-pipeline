@@ -116,12 +116,16 @@ def extract_final_summary(text):
     if not text:
         return ""
 
-    match = re.search(
-        r"(?:\*\*)?Final Summary:?(?:\*\*)?\s*(.+)",
-        text,
-        flags=re.IGNORECASE | re.DOTALL,
+    marker_pattern = re.compile(
+        r"(?:\*\*)?Final Summary:?(?:\*\*)?",
+        flags=re.IGNORECASE,
     )
-    summary = match.group(1).strip() if match else text.strip()
+    matches = list(marker_pattern.finditer(text))
+    if not matches:
+        return text.strip()
+
+    start_idx = matches[-1].end()
+    summary = text[start_idx:].strip()
 
     return summary
 
@@ -134,10 +138,16 @@ def extract_final_headline(text):
     if not text:
         return ""
 
-    match = re.search(
-        r"(?:\*\*)?Final Headline:?(?:\*\*)?\s*(.+)", text, flags=re.IGNORECASE
+    marker_pattern = re.compile(
+        r"(?:\*\*)?Final Headline:?(?:\*\*)?",
+        flags=re.IGNORECASE,
     )
-    headline = match.group(1).strip() if match else ""
+    matches = list(marker_pattern.finditer(text))
+    if not matches:
+        return ""
+
+    start_idx = matches[-1].end()
+    headline = text[start_idx:].strip()
     headline = headline.splitlines()[0].strip() if headline else ""
 
     return headline
@@ -160,7 +170,9 @@ def build_source_article_cache(db, stories):
 
     for story in stories:
         for ref in story.get("ref_articles", []):
-            ids_by_collection.setdefault(ref["collection"], set()).add(ref["article_id"])
+            ids_by_collection.setdefault(ref["collection"], set()).add(
+                ref["article_id"]
+            )
 
     for coll_name, article_ids in ids_by_collection.items():
         cursor = db[coll_name].find({"_id": {"$in": list(article_ids)}})
