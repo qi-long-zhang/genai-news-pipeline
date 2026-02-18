@@ -98,6 +98,18 @@ def check_is_visible(ref_articles):
     return has_popular or len(ref_articles) >= 3
 
 
+def get_latest_ref_article_at(ref_articles):
+    """
+    Get the latest update_date from ref_articles.
+    """
+    latest_upd_date = None
+    for ref in ref_articles or []:
+        upd_date = ref.get("update_date")
+        if upd_date and (latest_upd_date is None or upd_date > latest_upd_date):
+            latest_upd_date = upd_date
+    return latest_upd_date
+
+
 def load_prompt_template(prompt_key):
     """
     Load production prompt template.
@@ -350,6 +362,7 @@ def main():
     genai_client = genai.Client(api_key=GEMINI_API_KEY)
     single_prompt_template = load_prompt_template("single")
     multi_prompt_template = load_prompt_template("multi")
+    has_db_operation = False
 
     # 1. Get currently active stories (lifecycle: True)
     active_stories = get_active_stories(db)
@@ -443,6 +456,9 @@ def main():
                 new_story = {
                     "created_at": datetime.now(timezone.utc),  # UTC
                     "updated_at": datetime.now(timezone.utc),  # UTC
+                    "latest_ref_article_at": get_latest_ref_article_at(
+                        ref_articles
+                    ),
                     "is_active": True,
                     "is_visible": is_visible,
                     "ref_articles": ref_articles,
@@ -467,6 +483,7 @@ def main():
         if new_stories_to_insert:
             db[HOT_STORIES_COLLECTION].insert_many(new_stories_to_insert)
             print(f"Created {len(new_stories_to_insert)} new stories.")
+            has_db_operation = True
 
     # 7. Lifecycle Management: Deactivate expired stories
     retention_cutoff = datetime.now(timezone.utc) - timedelta(
@@ -504,6 +521,9 @@ def main():
             update_data = {
                 "ref_articles": story["ref_articles"],
                 "updated_at": datetime.now(timezone.utc),  # UTC
+                "latest_ref_article_at": get_latest_ref_article_at(
+                    story["ref_articles"]
+                ),
                 "is_active": story.get("is_active", True),
                 "is_visible": new_visibility,
                 "headline": story.get("headline"),
@@ -517,6 +537,7 @@ def main():
         print(
             f"Updated {len(bulk_updates)} existing stories (Deactivated {deactivated_count})."
         )
+        has_db_operation = True
 
     # 9. Mark source articles as aggregated (needs_aggregation=False)
     # Only execute after stories are successfully written to database
@@ -535,6 +556,12 @@ def main():
 
         print(
             f"Marked {total_marked} source articles as aggregated (needs_aggregation=False)."
+        )
+        has_db_operation = True
+
+    if not has_db_operation:
+        print(
+            "No aggregation actions were performed. No stories were created/updated and no source articles were marked."
         )
 
     client.close()
