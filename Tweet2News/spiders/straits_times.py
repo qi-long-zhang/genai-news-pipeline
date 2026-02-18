@@ -20,6 +20,7 @@ class StraitsTimesSpider(scrapy.Spider):
         self.cutoff_date = datetime.now(timezone.utc) - timedelta(days=3)
         self.max_date = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%S.000Z")
         self.existing_articles = {}
+        self.max_pages = 5
 
         with MongoClient(mongo_uri, tz_aware=True) as client:
             collection = client[mongo_db][mongo_collection]
@@ -83,6 +84,8 @@ class StraitsTimesSpider(scrapy.Spider):
             )
 
         next_page = self.page + 1
+        if next_page > self.max_pages:
+            return
         next_url = response.url.replace(f"page={self.page}", f"page={next_page}")
         self.page = next_page
         yield scrapy.Request(next_url, self.parse)
