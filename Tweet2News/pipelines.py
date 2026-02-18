@@ -97,7 +97,6 @@ class MongoPipeline:
                 "$set": {
                     "article": article,
                     "scraped_at": datetime.now(timezone.utc),
-                    "needs_scraping": False,
                     "needs_enrichment": needs_enrichment,
                 }
             },
