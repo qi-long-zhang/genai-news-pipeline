@@ -27,19 +27,14 @@ class MothershipSpider(scrapy.Spider):
                 {"article.update_date": {"$gte": self.cutoff_date}},
                 projection={
                     "_id": 1,
-                    "article.publish_date": 1,
                     "article.update_date": 1,
                 },
             )
             for doc in cursor:
                 article_data = doc.get("article", {})
-                p_date = article_data.get("publish_date")  # UTC
                 u_date = article_data.get("update_date")  # UTC
-                if p_date and u_date:
-                    self.existing_articles[doc["_id"]] = {
-                        "publish_date": p_date,
-                        "update_date": u_date,
-                    }
+                if u_date:
+                    self.existing_articles[doc["_id"]] = u_date
 
         yield scrapy.Request(
             url=f"https://mothership.sg/json/posts-{self.page}.json",
@@ -67,9 +62,7 @@ class MothershipSpider(scrapy.Spider):
 
             article_id = article.get("name")
             if article_id in self.existing_articles:
-                existing_update_date = self.existing_articles[article_id][
-                    "update_date"
-                ]  # UTC
+                existing_update_date = self.existing_articles[article_id]  # UTC
                 if date <= existing_update_date:  # UTC compare
                     continue
 
@@ -81,12 +74,7 @@ class MothershipSpider(scrapy.Spider):
             item["title"] = article.get("title")
             item["subtitle"] = article.get("excerpt")
             item["cover_image"] = article.get("image_url")
-            if article_id in self.existing_articles:
-                item["publish_date"] = self.existing_articles[article_id][
-                    "publish_date"
-                ]
-            else:
-                item["publish_date"] = date  # UTC
+            item["publish_date"] = date  # UTC
             item["update_date"] = date  # UTC
 
             yield scrapy.Request(
