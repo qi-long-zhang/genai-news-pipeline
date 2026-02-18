@@ -38,14 +38,6 @@ class StraitsTimesSpider(scrapy.Spider):
         )
 
     def parse(self, response):
-        def _parse_date(date_str):
-            if not date_str:
-                return None
-            dt = parser.parse(date_str)
-            if dt.tzinfo is None:
-                dt = dt.replace(tzinfo=timezone(timedelta(hours=8)))
-            return dt.astimezone(timezone.utc)
-
         data = json.loads(response.text)
         articles = data.get("cards") or []
         if not articles:
@@ -64,17 +56,7 @@ class StraitsTimesSpider(scrapy.Spider):
             ):
                 continue
 
-            publish_date = _parse_date(article.get("publishedDate"))  # UTC
-            if publish_date and publish_date < self.cutoff_date:  # UTC compare
-                return
-
             article_id = article.get("urlPath")
-            update_date = _parse_date(article.get("updatedDate"))  # UTC
-            if article_id in self.existing_articles:
-                existing_update_date = self.existing_articles[article_id]  # UTC
-                if update_date <= existing_update_date:  # UTC compare
-                    continue
-
             item = NewsArticleItem()
             item["_id"] = article_id
             item["url"] = f"https://www.straitstimes.com{article_id}"
@@ -89,13 +71,15 @@ class StraitsTimesSpider(scrapy.Spider):
                     "credit": media[0]["image"]["credit"],
                 }
             ]
-            item["publish_date"] = publish_date  # UTC
-            item["update_date"] = update_date  # UTC
 
             yield scrapy.Request(
                 item["url"],
                 self.parse_article,
-                meta={"cloudscraper": True, "item": item},
+                meta={
+                    "cloudscraper": True,
+                    "item": item,
+                    "existing_update_date": self.existing_articles.get(article_id),
+                },
             )
 
         next_page = self.page + 1
@@ -107,7 +91,35 @@ class StraitsTimesSpider(scrapy.Spider):
         def _clean(value):
             return value.strip() if value else None
 
+        def _parse_date(date_str):
+            if not date_str:
+                return None
+            dt = parser.parse(date_str)
+            if dt.tzinfo is None:
+                dt = dt.replace(tzinfo=timezone(timedelta(hours=8)))
+            return dt.astimezone(timezone.utc)
+
         item = response.meta["item"]
+        existing_update_date = response.meta.get("existing_update_date")
+
+        timestamp_elements = response.css('div[data-testid="timestamp-test-id"]')
+        for element in timestamp_elements:
+            raw_text = "".join(element.css("p::text").getall())
+            if "Published" in raw_text:
+                item["publish_date"] = _parse_date(_clean(raw_text.replace("Published", "")))
+                item["update_date"] = item["publish_date"]
+            elif "Updated" in raw_text:
+                item["update_date"] = _parse_date(_clean(raw_text.replace("Updated", "")))
+
+        publish_date = item.get("publish_date")
+        if not publish_date:
+            return
+        if publish_date and publish_date < self.cutoff_date:
+            return
+
+        update_date = item.get("update_date")
+        if existing_update_date and update_date and update_date <= existing_update_date:
+            return
 
         item["subtitle"] = response.css(
             'div[data-testid="headline-stack-test-id"] p.font-body-baseline-regular[data-testid="paragraph-test-id"]::text'
@@ -131,6 +143,8 @@ class StraitsTimesSpider(scrapy.Spider):
             text = _clean(node.xpath("string(.)").get())
             if text:
                 content.append({"tag": tag, "text": text})
+        if not content:
+            return
         item["content"] = content
 
         images = item["images"]
