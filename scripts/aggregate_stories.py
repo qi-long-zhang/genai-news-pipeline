@@ -1,6 +1,7 @@
 import os
 import json
 import re
+import time
 import numpy as np
 import networkx as nx
 from datetime import datetime, timedelta, timezone
@@ -18,6 +19,7 @@ MONGO_COLLECTIONS = os.getenv("MONGO_COLLECTIONS", "").split(",")
 GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
 PROMPTS_FILE = "data/json/prompts_production.json"
 MODEL_ID = "gemini-3-pro-preview"
+SUMMARY_API_MAX_RETRIES = 3
 if "channel_news_asia" not in MONGO_COLLECTIONS:
     MONGO_COLLECTIONS.append("channel_news_asia")
 
@@ -242,6 +244,26 @@ def format_prompt(ref_articles, template, source_article_cache):
     return template.format(content=content)
 
 
+def generate_content_with_retry(genai_client, prompt, story_id):
+    """
+    Call Gemini API with retry logic. Retries up to SUMMARY_API_MAX_RETRIES times.
+    """
+    for attempt in range(1, SUMMARY_API_MAX_RETRIES + 1):
+        try:
+            return genai_client.models.generate_content(
+                model=MODEL_ID,
+                contents=prompt,
+            )
+        except Exception as e:
+            if attempt >= SUMMARY_API_MAX_RETRIES:
+                raise
+            print(
+                f"Warning: Summarize API call failed for story {story_id} "
+                f"(attempt {attempt}/{SUMMARY_API_MAX_RETRIES}): {e}. Retrying..."
+            )
+            time.sleep(attempt)
+
+
 def summarize_story(
     story,
     genai_client,
@@ -266,9 +288,8 @@ def summarize_story(
             prompt = format_prompt(
                 ref_articles, single_prompt_template, source_article_cache
             )
-            response = genai_client.models.generate_content(
-                model=MODEL_ID,
-                contents=prompt,
+            response = generate_content_with_retry(
+                genai_client, prompt, story.get("_id")
             )
             response_text = getattr(response, "text", "")
             story["summary"] = extract_final_summary(response_text)
@@ -282,9 +303,8 @@ def summarize_story(
             prompt = format_prompt(
                 ref_articles, multi_prompt_template, source_article_cache
             )
-            response = genai_client.models.generate_content(
-                model=MODEL_ID,
-                contents=prompt,
+            response = generate_content_with_retry(
+                genai_client, prompt, story.get("_id")
             )
             response_text = getattr(response, "text", "")
             story["headline"] = extract_final_headline(response_text)
