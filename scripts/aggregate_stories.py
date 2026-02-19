@@ -1,6 +1,5 @@
 import os
 import json
-import re
 import time
 import numpy as np
 import networkx as nx
@@ -131,18 +130,10 @@ def extract_final_summary(text):
     if not text:
         return ""
 
-    marker_pattern = re.compile(
-        r"(?:\*\*)?Final Summary:?(?:\*\*)?",
-        flags=re.IGNORECASE,
-    )
-    matches = list(marker_pattern.finditer(text))
-    if not matches:
-        return text.strip()
-
-    start_idx = matches[-1].end()
-    summary = text[start_idx:].strip()
-
-    return summary
+    marker = "Final Summary:"
+    if marker in text:
+        return text.rsplit(marker, 1)[-1].strip()
+    return text.strip()
 
 
 def extract_final_headline(text):
@@ -153,16 +144,11 @@ def extract_final_headline(text):
     if not text:
         return ""
 
-    marker_pattern = re.compile(
-        r"(?:\*\*)?Final Headline:?(?:\*\*)?",
-        flags=re.IGNORECASE,
-    )
-    matches = list(marker_pattern.finditer(text))
-    if not matches:
+    marker = "Final Headline:"
+    if marker not in text:
         return ""
 
-    start_idx = matches[-1].end()
-    headline = text[start_idx:].strip()
+    headline = text.split(marker, 1)[1].strip()
     headline = headline.splitlines()[0].strip() if headline else ""
 
     return headline
