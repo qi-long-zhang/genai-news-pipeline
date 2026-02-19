@@ -83,6 +83,7 @@ def get_article_ref(art):
         "article_id": art.get("_id"),
         "collection": art.get("_collection_name"),  # Store for efficient lookups
         "url": article.get("url"),
+        "source": article.get("source"),
         "title": article.get("title"),
         "cover_image": article.get("cover_image"),
         "update_date": article.get("update_date"),
