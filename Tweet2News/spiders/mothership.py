@@ -18,6 +18,7 @@ class MothershipSpider(scrapy.Spider):
         mongo_collection = self.name
 
         self.page = 1
+        self.max_page = 2
         self.cutoff_date = datetime.now(timezone.utc) - timedelta(days=3)
         self.existing_articles = {}
 
@@ -84,6 +85,8 @@ class MothershipSpider(scrapy.Spider):
             )
 
         next_page = self.page + 1
+        if next_page > self.max_page:
+            return
         next_url = response.url.replace(
             f"posts-{self.page}.json", f"posts-{next_page}.json"
         )
