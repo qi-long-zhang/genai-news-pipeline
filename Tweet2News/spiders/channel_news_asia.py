@@ -19,6 +19,7 @@ class ChannelNewsAsiaSpider(scrapy.Spider):
         mongo_collection = self.name
 
         self.page = 0
+        self.max_pages = 5
         self.cutoff_date = datetime.now(timezone.utc) - timedelta(days=3)
         self.existing_articles = {}
 
@@ -39,14 +40,6 @@ class ChannelNewsAsiaSpider(scrapy.Spider):
         )
 
     def parse(self, response):
-        def _parse_date(date_str):
-            if not date_str:
-                return None
-            dt = parser.parse(date_str)
-            if dt.tzinfo is None:
-                dt = dt.replace(tzinfo=timezone(timedelta(hours=8)))
-            return dt.astimezone(timezone.utc)
-
         data = json.loads(response.text)
         articles = data.get("result") or []
         if not articles:
@@ -60,15 +53,7 @@ class ChannelNewsAsiaSpider(scrapy.Spider):
             if "/interactive/" in article_url.lower():
                 continue
 
-            date = _parse_date(article.get("date"))  # UTC
-            if date and date < self.cutoff_date:  # UTC compare
-                return
-
             article_id = article.get("uuid")
-            if article_id in self.existing_articles:
-                existing_update_date = self.existing_articles[article_id]  # UTC
-                if date <= existing_update_date:  # UTC compare
-                    continue
 
             item = NewsArticleItem()
             item["_id"] = article_id
@@ -86,21 +71,25 @@ class ChannelNewsAsiaSpider(scrapy.Spider):
                 ", ".join(
                     cleaned
                     for a in author_details
-                    if (cleaned := a.get("author").strip())
+                    if (author := a.get("author")) and (cleaned := author.strip())
                 )
                 or None
             )
 
             item["cover_image"] = article.get("img_extra", {}).get("original")
-            item["update_date"] = date
-
             yield scrapy.Request(
                 item["url"],
                 self.parse_article,
-                meta={"cloudscraper": True, "item": item},
+                meta={
+                    "cloudscraper": True,
+                    "item": item,
+                    "existing_update_date": self.existing_articles.get(article_id),
+                },
             )
 
         next_page = self.page + 1
+        if next_page >= self.max_pages:
+            return
         next_url = response.url.replace(f"page={self.page}", f"page={next_page}")
         self.page = next_page
         yield scrapy.Request(next_url, self.parse)
@@ -118,11 +107,22 @@ class ChannelNewsAsiaSpider(scrapy.Spider):
             return dt.astimezone(timezone.utc)
 
         item = response.meta["item"]
+        existing_update_date = response.meta.get("existing_update_date")
 
         content_section = response.css("div.content")
+        article_publish = content_section.css(".article-publish")
+        publish_raw = article_publish.css("::text").get()
+        item["publish_date"] = _parse_date(_clean(publish_raw))
+        item["update_date"] = item["publish_date"]
+        update_raw = article_publish.css("span::text").get()
+        if update_raw:
+            update_clean = _clean(update_raw.replace("(Updated:", "").replace(")", ""))
+            item["update_date"] = _parse_date(update_clean)
 
-        publish_date = _clean(content_section.css(".article-publish::text").get())
-        item["publish_date"] = _parse_date(publish_date)
+        if not item["publish_date"] or item["publish_date"] < self.cutoff_date:
+            return
+        if existing_update_date and item["update_date"] <= existing_update_date:
+            return
 
         content = []
         content_nodes = content_section.xpath(
