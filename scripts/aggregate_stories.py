@@ -1,6 +1,7 @@
 import os
 import json
 import time
+import re
 import numpy as np
 import networkx as nx
 from datetime import datetime, timedelta, timezone
@@ -132,17 +133,14 @@ def load_prompt_template(prompt_key):
 def extract_final_summary(text):
     """
     Extract summary from LLM output by locating the final "Final Summary" marker.
-    Handles:
-    - "Final Summary:\\n"
-    - "Final Summary\\n"
+    Supports both "Final Summary" and "Final Summary:".
     """
     if not text:
         return ""
 
-    if "Final Summary:\n" in text:
-        return text.rsplit("Final Summary:\n", 1)[-1].strip()
-    elif "Final Summary\n" in text:
-        return text.rsplit("Final Summary\n", 1)[-1].strip()
+    parts = re.split(r"(?:^|\n)\s*Final Summary\s*:?\s*", text, flags=re.IGNORECASE)
+    if len(parts) > 1:
+        return parts[-1].strip()
     return text.strip()
 
 
@@ -162,6 +160,20 @@ def extract_final_headline(text):
     headline = headline.splitlines()[0].strip() if headline else ""
 
     return headline
+
+
+def build_empty_summary_message(response):
+    """
+    Build a readable fallback message when model output is empty.
+    """
+    block_reason = getattr(
+        getattr(response, "prompt_feedback", None), "block_reason", None
+    )
+    if block_reason:
+        reason = getattr(block_reason, "value", None) or str(block_reason)
+        return f"Summary unavailable: model response blocked ({reason})."
+
+    return "Summary unavailable: model returned empty content."
 
 
 def cache_source_article(source_article, collection_name, source_article_cache):
@@ -287,7 +299,11 @@ def summarize_story(
     try:
         prompt = format_prompt(ref_articles, prompt_template, source_article_cache)
         response = generate_content_with_retry(genai_client, prompt, story.get("_id"))
-        response_text = getattr(response, "text", "")
+        response_text = (getattr(response, "text", "") or "").strip()
+        if not response_text:
+            story["summary"] = build_empty_summary_message(response)
+            return
+
         if is_multi_article:
             story["headline"] = extract_final_headline(response_text)
         story["summary"] = extract_final_summary(response_text)
