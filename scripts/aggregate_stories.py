@@ -131,15 +131,18 @@ def load_prompt_template(prompt_key):
 
 def extract_final_summary(text):
     """
-    Extract summary from Meta Prompting output using the
-    '**Final Summary:**' marker format.
+    Extract summary from LLM output by locating the final "Final Summary" marker.
+    Handles:
+    - "Final Summary:\\n"
+    - "Final Summary\\n"
     """
     if not text:
         return ""
 
-    marker = "Final Summary:"
-    if marker in text:
-        return text.rsplit(marker, 1)[-1].strip()
+    if "Final Summary:\n" in text:
+        return text.rsplit("Final Summary:\n", 1)[-1].strip()
+    elif "Final Summary\n" in text:
+        return text.rsplit("Final Summary\n", 1)[-1].strip()
     return text.strip()
 
 
