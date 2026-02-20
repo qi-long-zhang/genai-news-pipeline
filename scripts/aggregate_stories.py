@@ -94,10 +94,10 @@ def get_article_ref(art):
 def check_is_visible(ref_articles):
     """
     Evaluate if a story should be visible.
-    Criteria: 1) Has a popular article OR 2) Has more than or equal to 3 articles.
+    Criteria: 1) Has a popular article OR 2) Has more than or equal to 2 articles.
     """
     has_popular = any(ref.get("is_popular") for ref in ref_articles)
-    return has_popular or len(ref_articles) >= 3
+    return has_popular or len(ref_articles) >= 2
 
 
 def get_latest_ref_article_at(ref_articles):
@@ -110,6 +110,13 @@ def get_latest_ref_article_at(ref_articles):
         if upd_date and (latest_upd_date is None or upd_date > latest_upd_date):
             latest_upd_date = upd_date
     return latest_upd_date
+
+
+def get_cover_images(ref_articles):
+    """
+    Build ordered cover_images from ref_articles.
+    """
+    return [ref.get("cover_image") for ref in (ref_articles or [])]
 
 
 def load_prompt_template(prompt_key):
@@ -271,35 +278,20 @@ def summarize_story(
     if not is_multi_article:
         # Single-article headline should always mirror the article title.
         story["headline"] = ref_articles[0].get("title") or ""
-        try:
-            prompt = format_prompt(
-                ref_articles, single_prompt_template, source_article_cache
-            )
-            response = generate_content_with_retry(
-                genai_client, prompt, story.get("_id")
-            )
-            response_text = getattr(response, "text", "")
-            story["summary"] = extract_final_summary(response_text)
-
-        except Exception as e:
-            story_id = story.get("_id")
-            print(f"Warning: Failed to summarize story {story_id}: {e}")
-
-    else:
-        try:
-            prompt = format_prompt(
-                ref_articles, multi_prompt_template, source_article_cache
-            )
-            response = generate_content_with_retry(
-                genai_client, prompt, story.get("_id")
-            )
-            response_text = getattr(response, "text", "")
+    prompt_template = (
+        multi_prompt_template if is_multi_article else single_prompt_template
+    )
+    try:
+        prompt = format_prompt(ref_articles, prompt_template, source_article_cache)
+        response = generate_content_with_retry(genai_client, prompt, story.get("_id"))
+        response_text = getattr(response, "text", "")
+        if is_multi_article:
             story["headline"] = extract_final_headline(response_text)
-            story["summary"] = extract_final_summary(response_text)
+        story["summary"] = extract_final_summary(response_text)
 
-        except Exception as e:
-            story_id = story.get("_id")
-            print(f"Warning: Failed to summarize story {story_id}: {e}")
+    except Exception as e:
+        story_id = story.get("_id")
+        print(f"Warning: Failed to summarize story {story_id}: {e}")
 
 
 def update_ref_articles_from_source(db, active_stories, source_article_cache):
@@ -315,11 +307,8 @@ def update_ref_articles_from_source(db, active_stories, source_article_cache):
             ids_by_collection.setdefault(ref_article["collection"], set()).add(
                 ref_article["article_id"]
             )
-    for coll_name in set(ids_by_collection.keys()):
-        article_ids = list(ids_by_collection.get(coll_name, set()))
-        if not article_ids:
-            continue
-
+    for coll_name in ids_by_collection:
+        article_ids = list(ids_by_collection[coll_name])
         query = {"needs_aggregation": True, "_id": {"$in": article_ids}}
         cursor = db[coll_name].find(query)
         for source_article in cursor:
@@ -351,8 +340,8 @@ def update_ref_articles_from_source(db, active_stories, source_article_cache):
         if updated:
             story["ref_articles"] = ref_articles
             story["is_updated"] = True
-            story["summary"] = None  # Reset to trigger regeneration
-            story["headline"] = None  # Reset to trigger regeneration (multi-article)
+            story["summary"] = None
+            story["headline"] = None
             updated_count += 1
 
     if updated_count > 0:
@@ -416,10 +405,8 @@ def main():
                     )
                     story.setdefault("ref_articles", []).append(get_article_ref(art))
                     story["is_updated"] = True
-                    story["summary"] = None  # Reset to trigger regeneration
-                    story["headline"] = (
-                        None  # Reset to trigger regeneration (multi-article)
-                    )
+                    story["summary"] = None
+                    story["headline"] = None
                     # Track article for needs_aggregation update
                     articles_to_mark.append((art["_collection_name"], art["_id"]))
                     found_match = True
@@ -458,29 +445,27 @@ def main():
             ref_articles = [get_article_ref(art) for art in component_articles]
             is_visible = check_is_visible(ref_articles)
 
-            # Save all clusters of 2+ articles, or 1 if it's popular
-            if len(ref_articles) >= 2 or is_visible:
+            # Save all clusters that are visible
+            if is_visible:
                 new_story = {
                     "created_at": datetime.now(timezone.utc),  # UTC
                     "updated_at": datetime.now(timezone.utc),  # UTC
-                    "latest_ref_article_at": get_latest_ref_article_at(
-                        ref_articles
-                    ),
+                    "latest_ref_article_at": get_latest_ref_article_at(ref_articles),
                     "is_active": True,
                     "is_visible": is_visible,
                     "ref_articles": ref_articles,
+                    "cover_images": get_cover_images(ref_articles),
                     "summary": None,
                     "headline": None,
                 }
 
-                if is_visible:
-                    summarize_story(
-                        new_story,
-                        genai_client=genai_client,
-                        single_prompt_template=single_prompt_template,
-                        multi_prompt_template=multi_prompt_template,
-                        source_article_cache=source_article_cache,
-                    )
+                summarize_story(
+                    new_story,
+                    genai_client=genai_client,
+                    single_prompt_template=single_prompt_template,
+                    multi_prompt_template=multi_prompt_template,
+                    source_article_cache=source_article_cache,
+                )
                 new_stories_to_insert.append(new_story)
 
                 # Track articles for needs_aggregation update
@@ -498,12 +483,7 @@ def main():
     )
     deactivated_count = 0
     for story in active_stories:
-        latest_upd_date = None
-        for ref in story.get("ref_articles", []):
-            upd_date = ref.get("update_date")  # UTC
-            if upd_date:
-                if latest_upd_date is None or upd_date > latest_upd_date:
-                    latest_upd_date = upd_date
+        latest_upd_date = get_latest_ref_article_at(story.get("ref_articles"))
 
         if latest_upd_date and latest_upd_date < retention_cutoff:
             story["is_active"] = False
@@ -527,6 +507,7 @@ def main():
 
             update_data = {
                 "ref_articles": story["ref_articles"],
+                "cover_images": get_cover_images(story["ref_articles"]),
                 "updated_at": datetime.now(timezone.utc),  # UTC
                 "latest_ref_article_at": get_latest_ref_article_at(
                     story["ref_articles"]
