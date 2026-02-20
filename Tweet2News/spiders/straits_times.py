@@ -109,19 +109,21 @@ class StraitsTimesSpider(scrapy.Spider):
         for element in timestamp_elements:
             raw_text = "".join(element.css("p::text").getall())
             if "Published" in raw_text:
-                item["publish_date"] = _parse_date(_clean(raw_text.replace("Published", "")))
+                item["publish_date"] = _parse_date(
+                    _clean(raw_text.replace("Published", ""))
+                )
                 item["update_date"] = item["publish_date"]
             elif "Updated" in raw_text:
-                item["update_date"] = _parse_date(_clean(raw_text.replace("Updated", "")))
+                item["update_date"] = _parse_date(
+                    _clean(raw_text.replace("Updated", ""))
+                )
 
         publish_date = item.get("publish_date")
-        if not publish_date:
-            return
-        if publish_date and publish_date < self.cutoff_date:
+        if not publish_date or publish_date < self.cutoff_date:
             return
 
         update_date = item.get("update_date")
-        if existing_update_date and update_date and update_date <= existing_update_date:
+        if existing_update_date and update_date <= existing_update_date:
             return
 
         item["subtitle"] = response.css(
@@ -150,7 +152,6 @@ class StraitsTimesSpider(scrapy.Spider):
             return
         item["content"] = content
 
-        images = item["images"]
         image_nodes = response.css('figure[data-testid="inline-media-test-id"]')
         for node in image_nodes:
             img_url = _clean(node.css("img::attr(src)").get())
@@ -167,8 +168,7 @@ class StraitsTimesSpider(scrapy.Spider):
             image = {"url": img_url, "caption": caption}
             if credit:
                 image["credit"] = credit
-            images.append(image)
-        item["images"] = images
+            item["images"].append(image)
 
         videos = []
         video_frames = response.css(
