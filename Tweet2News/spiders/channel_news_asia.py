@@ -28,7 +28,7 @@ class ChannelNewsAsiaSpider(scrapy.Spider):
         mongo_collection = self.name
 
         self.page = 0
-        self.max_pages = 5
+        self.max_pages = 3
         self.cutoff_date = datetime.now(timezone.utc) - timedelta(days=3)
         self.existing_articles = {}
 

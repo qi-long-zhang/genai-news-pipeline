@@ -20,7 +20,7 @@ class StraitsTimesSpider(scrapy.Spider):
         self.cutoff_date = datetime.now(timezone.utc) - timedelta(days=3)
         self.max_date = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%S.000Z")
         self.existing_articles = {}
-        self.max_pages = 5
+        self.max_pages = 3
 
         with MongoClient(mongo_uri, tz_aware=True) as client:
             collection = client[mongo_db][mongo_collection]
