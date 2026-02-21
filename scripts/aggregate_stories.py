@@ -26,8 +26,8 @@ if "channel_news_asia" not in MONGO_COLLECTIONS:
 # Thresholds
 SIMILARITY_THRESHOLD = 0.9  # For merging into existing stories or clustering new ones
 HOT_STORIES_COLLECTION = "hot_stories"
-NEW_ARTICLE_WINDOW_HOURS = 36  # Look back 36 hours for new articles
-STORY_RETENTION_HOURS = 36  # Keep articles in a story for 36 hours
+NEW_ARTICLE_WINDOW_HOURS = 24  # Look back 24 hours for new articles
+STORY_RETENTION_HOURS = 24  # Keep articles in a story for 24 hours
 
 
 def get_active_stories(db):
