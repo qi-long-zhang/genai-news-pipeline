@@ -290,9 +290,13 @@ def summarize_story(
         return
 
     is_multi_article = len(ref_articles) > 1
-    if not is_multi_article:
-        # Single-article headline should always mirror the article title.
-        story["headline"] = ref_articles[0].get("title") or ""
+    if is_multi_article:
+        ref_articles.sort(
+            key=lambda ref: ref.get("update_date"),
+            reverse=True,
+        )
+    default_headline = ref_articles[0].get("title") or ""
+    story["headline"] = default_headline
     prompt_template = (
         multi_prompt_template if is_multi_article else single_prompt_template
     )
