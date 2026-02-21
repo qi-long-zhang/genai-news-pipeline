@@ -11,6 +11,10 @@ class MothershipSpider(scrapy.Spider):
     name = "mothership"
     allowed_domains = ["mothership.sg"]
 
+    @staticmethod
+    def _clean(value):
+        return value.strip() if value else None
+
     async def start(self):
         mongo_uri = self.settings.get("MONGO_URI")
         mongo_db = self.settings.get("MONGO_DATABASE")
@@ -33,26 +37,21 @@ class MothershipSpider(scrapy.Spider):
             meta={"cloudscraper": True},
         )
 
-    @staticmethod
-    def _clean(value):
-        return value.strip() if value else None
-
-    @staticmethod
-    def _parse_date(date_str):
-        if not date_str:
-            return None
-        dt = parser.parse(date_str)
-        if dt.tzinfo is None:
-            dt = dt.replace(tzinfo=timezone(timedelta(hours=8)))
-        return dt.astimezone(timezone.utc)
-
     def parse(self, response):
+        def _parse_date(date_str):
+            if not date_str:
+                return None
+            dt = parser.parse(date_str)
+            if dt.tzinfo is None:
+                dt = dt.replace(tzinfo=timezone(timedelta(hours=8)))
+            return dt.astimezone(timezone.utc)
+
         articles = response.css("article[data-post-id]")
         if not articles:
             return
 
         for article in articles:
-            date = self._parse_date(
+            date = _parse_date(
                 self._clean(article.css("span.meta-time::text").get())
             )  # UTC
             if date and date < self.cutoff_date:
