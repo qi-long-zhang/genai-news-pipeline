@@ -18,7 +18,7 @@ MONGO_DATABASE = os.getenv("MONGO_DATABASE", "")
 MONGO_COLLECTIONS = os.getenv("MONGO_COLLECTIONS", "").split(",")
 GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
 PROMPTS_FILE = "data/json/prompts_production.json"
-MODEL_ID = "gemini-3-pro-preview"
+MODEL_ID = "gemini-3.1-pro-preview"
 SUMMARY_API_MAX_RETRIES = 3
 if "channel_news_asia" not in MONGO_COLLECTIONS:
     MONGO_COLLECTIONS.append("channel_news_asia")
