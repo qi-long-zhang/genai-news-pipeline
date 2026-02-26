@@ -19,8 +19,8 @@ MONGO_COLLECTIONS = os.getenv("MONGO_COLLECTIONS", "").split(",")
 PROMPTS_FILE = "data/json/prompts_production.json"
 MODEL_ID = "gemini-3-pro-preview"
 SUMMARY_API_MAX_RETRIES = 3
-SUMMARY_API_TIMEOUT_SECONDS = int(os.getenv("SUMMARY_API_TIMEOUT_SECONDS", "120"))
-SUMMARY_API_MAX_CONCURRENCY = int(os.getenv("SUMMARY_API_MAX_CONCURRENCY", "3"))
+SUMMARY_API_TIMEOUT_SECONDS = int(os.getenv("SUMMARY_API_TIMEOUT_SECONDS", "90"))
+SUMMARY_API_MAX_CONCURRENCY = int(os.getenv("SUMMARY_API_MAX_CONCURRENCY", "5"))
 if "channel_news_asia" not in MONGO_COLLECTIONS:
     MONGO_COLLECTIONS.append("channel_news_asia")
 
