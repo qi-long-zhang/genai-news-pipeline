@@ -13,6 +13,8 @@ jobs:
       MONGO_DATABASE: ${{ secrets.MONGO_DATABASE }}
       MONGO_COLLECTIONS: ${{ secrets.MONGO_COLLECTIONS }}
       GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+      SUMMARY_API_TIMEOUT_SECONDS: 120
+      SUMMARY_API_MAX_CONCURRENCY: 3
     steps:
       - name: Checkout repository
         uses: actions/checkout@v6

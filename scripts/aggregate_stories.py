@@ -1,7 +1,7 @@
 import os
 import json
-import time
 import re
+import asyncio
 import numpy as np
 import networkx as nx
 from datetime import datetime, timedelta, timezone
@@ -16,10 +16,11 @@ load_dotenv()
 MONGO_URI = os.getenv("MONGO_URI")
 MONGO_DATABASE = os.getenv("MONGO_DATABASE", "")
 MONGO_COLLECTIONS = os.getenv("MONGO_COLLECTIONS", "").split(",")
-GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
 PROMPTS_FILE = "data/json/prompts_production.json"
-MODEL_ID = "gemini-3.1-pro-preview"
+MODEL_ID = "gemini-3-pro-preview"
 SUMMARY_API_MAX_RETRIES = 3
+SUMMARY_API_TIMEOUT_SECONDS = int(os.getenv("SUMMARY_API_TIMEOUT_SECONDS", "120"))
+SUMMARY_API_MAX_CONCURRENCY = int(os.getenv("SUMMARY_API_MAX_CONCURRENCY", "3"))
 if "channel_news_asia" not in MONGO_COLLECTIONS:
     MONGO_COLLECTIONS.append("channel_news_asia")
 
@@ -253,15 +254,18 @@ def format_prompt(ref_articles, template, source_article_cache):
     return template.format(content=content)
 
 
-def generate_content_with_retry(genai_client, prompt, story_id):
+async def generate_content_with_retry_async(aclient, prompt, story_id):
     """
-    Call Gemini API with retry logic. Retries up to SUMMARY_API_MAX_RETRIES times.
+    Call Gemini API with retry logic and request timeout.
     """
     for attempt in range(1, SUMMARY_API_MAX_RETRIES + 1):
         try:
-            return genai_client.models.generate_content(
-                model=MODEL_ID,
-                contents=prompt,
+            return await asyncio.wait_for(
+                aclient.models.generate_content(
+                    model=MODEL_ID,
+                    contents=prompt,
+                ),
+                timeout=SUMMARY_API_TIMEOUT_SECONDS,
             )
         except Exception as e:
             if attempt >= SUMMARY_API_MAX_RETRIES:
@@ -270,12 +274,13 @@ def generate_content_with_retry(genai_client, prompt, story_id):
                 f"Warning: Summarize API call failed for story {story_id} "
                 f"(attempt {attempt}/{SUMMARY_API_MAX_RETRIES}): {e}. Retrying..."
             )
-            time.sleep(attempt)
+            await asyncio.sleep(attempt)
 
 
-def summarize_story(
+async def summarize_story_async(
     story,
-    genai_client,
+    aclient,
+    semaphore,
     single_prompt_template,
     multi_prompt_template,
     source_article_cache,
@@ -302,19 +307,71 @@ def summarize_story(
     )
     try:
         prompt = format_prompt(ref_articles, prompt_template, source_article_cache)
-        response = generate_content_with_retry(genai_client, prompt, story.get("_id"))
+        async with semaphore:
+            response = await generate_content_with_retry_async(
+                aclient, prompt, story.get("_id")
+            )
         response_text = (getattr(response, "text", "") or "").strip()
         if not response_text:
             story["summary"] = build_empty_summary_message(response)
             return
 
         if is_multi_article:
-            story["headline"] = extract_final_headline(response_text)
+            parsed_headline = extract_final_headline(response_text)
+            if parsed_headline:
+                story["headline"] = parsed_headline
         story["summary"] = extract_final_summary(response_text)
 
     except Exception as e:
         story_id = story.get("_id")
         print(f"Warning: Failed to summarize story {story_id}: {e}")
+
+
+async def summarize_stories_async(
+    stories,
+    single_prompt_template,
+    multi_prompt_template,
+    source_article_cache,
+):
+    """
+    Summarize stories concurrently with controlled concurrency.
+    """
+    if not stories:
+        return
+
+    semaphore = asyncio.Semaphore(SUMMARY_API_MAX_CONCURRENCY)
+    async with genai.Client().aio as aclient:
+        tasks = [
+            summarize_story_async(
+                story=story,
+                aclient=aclient,
+                semaphore=semaphore,
+                single_prompt_template=single_prompt_template,
+                multi_prompt_template=multi_prompt_template,
+                source_article_cache=source_article_cache,
+            )
+            for story in stories
+        ]
+        await asyncio.gather(*tasks)
+
+
+def summarize_stories(
+    stories,
+    single_prompt_template,
+    multi_prompt_template,
+    source_article_cache,
+):
+    """
+    Sync wrapper for async story summarization.
+    """
+    asyncio.run(
+        summarize_stories_async(
+            stories=stories,
+            single_prompt_template=single_prompt_template,
+            multi_prompt_template=multi_prompt_template,
+            source_article_cache=source_article_cache,
+        )
+    )
 
 
 def update_ref_articles_from_source(db, active_stories, source_article_cache):
@@ -378,7 +435,6 @@ def update_ref_articles_from_source(db, active_stories, source_article_cache):
 def main():
     client = MongoClient(MONGO_URI, tz_aware=True)
     db = client[MONGO_DATABASE]
-    genai_client = genai.Client(api_key=GEMINI_API_KEY)
     single_prompt_template = load_prompt_template("single")
     multi_prompt_template = load_prompt_template("multi")
     has_db_operation = False
@@ -481,19 +537,18 @@ def main():
                     "summary": None,
                     "headline": None,
                 }
-
-                summarize_story(
-                    new_story,
-                    genai_client=genai_client,
-                    single_prompt_template=single_prompt_template,
-                    multi_prompt_template=multi_prompt_template,
-                    source_article_cache=source_article_cache,
-                )
                 new_stories_to_insert.append(new_story)
 
                 # Track articles for needs_aggregation update
                 for art in component_articles:
                     articles_to_mark.append((art["_collection_name"], art["_id"]))
+
+        summarize_stories(
+            stories=new_stories_to_insert,
+            single_prompt_template=single_prompt_template,
+            multi_prompt_template=multi_prompt_template,
+            source_article_cache=source_article_cache,
+        )
 
         if new_stories_to_insert:
             db[HOT_STORIES_COLLECTION].insert_many(new_stories_to_insert)
@@ -514,20 +569,26 @@ def main():
             deactivated_count += 1
 
     # 8. Final Sync: Update existing stories
-    bulk_updates = []
+    stories_to_summarize = []
     for story in active_stories:
         if story.get("is_updated"):
             new_visibility = check_is_visible(story["ref_articles"])
+            story["_new_visibility"] = new_visibility
 
             if new_visibility:
-                summarize_story(
-                    story,
-                    genai_client=genai_client,
-                    single_prompt_template=single_prompt_template,
-                    multi_prompt_template=multi_prompt_template,
-                    source_article_cache=source_article_cache,
-                )
+                stories_to_summarize.append(story)
 
+    summarize_stories(
+        stories=stories_to_summarize,
+        single_prompt_template=single_prompt_template,
+        multi_prompt_template=multi_prompt_template,
+        source_article_cache=source_article_cache,
+    )
+
+    bulk_updates = []
+    for story in active_stories:
+        if story.get("is_updated"):
+            new_visibility = story.get("_new_visibility", check_is_visible(story["ref_articles"]))
             update_data = {
                 "ref_articles": story["ref_articles"],
                 "cover_images": get_cover_images(story["ref_articles"]),
@@ -540,8 +601,8 @@ def main():
                 "headline": story.get("headline"),
                 "summary": story.get("summary"),  # Include updated summary
             }
-
             bulk_updates.append(UpdateOne({"_id": story["_id"]}, {"$set": update_data}))
+            story.pop("_new_visibility", None)
 
     if bulk_updates:
         db[HOT_STORIES_COLLECTION].bulk_write(bulk_updates)
