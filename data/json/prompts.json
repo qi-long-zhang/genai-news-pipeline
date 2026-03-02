@@ -24,7 +24,7 @@
         "rationale": "Headline/subhead excluded to prevent the self-designed prompt from anchoring on them. The model should discover the article's core independently. Topic and source are provided as meta-information to help design the optimal strategy."
       },
       "prompt": "You are a meta-cognitive AI assistant specializing in news summarization.\n\nYou will summarize the following article. Before doing so, design the optimal summarization approach for this specific article.\n\nSource: {source}\nTopic: {topic}\n\n{content}\n\n--- STAGE 1: PROMPT DESIGN ---\nAnalyze the article above, then design the ideal summarization prompt for it. Consider:\n- What type of {topic} story is this (breaking news, analysis, feature, opinion)?\n- What is the writing style of {source} and how should the summary adapt?\n- What are the most important elements a reader needs from this article?\n- What common summarization pitfalls should be avoided for this type of article?\n\nWrite your designed prompt as a clear instruction. Your prompt must specify producing a 3-5 sentence summary that is strictly faithful to the article content.\n\n--- STAGE 2: EXECUTE ---\nNow follow your own designed prompt to produce the summary. Base every claim solely on the article above.\n\nFinal Summary:",
-      "reference": "Zhang et al. (2024). Meta-Prompting: Enhancing Language Models with Task-Agnostic Scaffolding. arXiv:2401.12954"
+      "reference": "Zhang et al. (2023). Meta Prompting for AI Systems. arXiv:2311.11482"
     },
     {
       "technique": "Tree-of-Thought (ToT)",
