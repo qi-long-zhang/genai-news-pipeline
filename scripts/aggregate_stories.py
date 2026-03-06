@@ -300,6 +300,8 @@ async def summarize_story_async(
             key=lambda ref: ref.get("update_date"),
             reverse=True,
         )
+        # Update cover_images to match the sorted ref_articles
+        story["cover_images"] = get_cover_images(ref_articles)
     default_headline = ref_articles[0].get("title") or ""
     story["headline"] = default_headline
     prompt_template = (
