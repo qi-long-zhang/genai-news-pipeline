@@ -306,7 +306,7 @@ async def summarize_story_async(
         multi_prompt_template if is_multi_article else single_prompt_template
     )
     try:
-        prompt = format_prompt(ref_articles, prompt_template, source_article_cache)
+        prompt = format_prompt(ref_articles[:5], prompt_template, source_article_cache)
         async with semaphore:
             response = await generate_content_with_retry_async(
                 aclient, prompt, story.get("_id")
