@@ -22,7 +22,7 @@ DATASET_NAME = "zhang-qilong/SG-News-Summarization"
 PROMPTS_FILE = "data/json/prompts.json"
 OUTPUT_FILE = "data/json/generated_summaries.json"
 # The user specifically requested this model.
-MODEL_ID = "gemini-3-pro-preview"
+MODEL_ID = "gemini-3.1-pro-preview"
 
 
 def load_prompts(filepath: str) -> List[Dict[str, Any]]:
