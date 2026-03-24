@@ -451,7 +451,7 @@ async def summarize_story_async(
 ):
     """
     Generate initial timeline content for new stories, or append timeline updates
-    for existing stories with newly merged articles.
+    for existing stories with newly merged or refreshed articles.
     """
     ref_articles = story.get("ref_articles") or []
     if not ref_articles:
@@ -460,7 +460,7 @@ async def summarize_story_async(
     sort_ref_articles(ref_articles)
     story["cover_images"] = get_cover_images(ref_articles)
     timeline = ensure_story_timeline(story)
-    new_ref_articles = story.get("_new_ref_articles") or []
+    update_ref_articles = story.get("_new_ref_articles") or []
     is_multi_article = len(ref_articles) > 1
     default_headline = ref_articles[0].get("title") or ""
     if not story.get("headline"):
@@ -500,13 +500,13 @@ async def summarize_story_async(
             story["summary"] = render_timeline_summary(story["timeline"])
             return
 
-        if not new_ref_articles:
+        if not update_ref_articles:
             story["summary"] = render_timeline_summary(story.get("timeline") or [])
             return
 
         prompt = format_timeline_update_prompt(
             story=story,
-            new_ref_articles=new_ref_articles,
+            new_ref_articles=update_ref_articles,
             template=timeline_update_prompt_template,
             source_article_cache=source_article_cache,
         )
@@ -533,7 +533,7 @@ async def summarize_story_async(
                 build_timeline_entry(
                     summary_text=update_text,
                     entry_type="update",
-                    ref_articles=new_ref_articles,
+                    ref_articles=update_ref_articles,
                 )
             )
 
@@ -633,7 +633,11 @@ def update_ref_articles_from_source(db, active_stories, source_article_cache):
                 source_article["_collection_name"] = (
                     coll_name  # Restore collection name
                 )
-                ref_articles[i] = get_article_ref(source_article)
+                updated_ref_article = get_article_ref(source_article)
+                ref_articles[i] = updated_ref_article
+                # Reuse the incremental update path so refreshed source content can
+                # generate new timeline/headline updates for the story.
+                story.setdefault("_new_ref_articles", []).append(updated_ref_article)
                 updated = True
                 # Record for later bulk update
                 articles_to_mark.append((coll_name, source_article["_id"]))
