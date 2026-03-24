@@ -157,13 +157,52 @@ def build_timeline_source_refs(ref_articles):
     ]
 
 
-def build_timeline_entry(summary_text, entry_type, ref_articles, created_at=None):
+def get_timeline_event_at(ref_articles, fallback=None):
+    """
+    Resolve the display time for a timeline entry from source article update times.
+    """
+    return get_latest_ref_article_at(ref_articles) or fallback
+
+
+def get_timeline_entry_sort_key(entry):
+    """
+    Build a stable sort key for timeline entries.
+    """
+    event_at = entry.get("event_at")
+    if isinstance(event_at, datetime):
+        return event_at
+
+    source_refs = entry.get("source_refs") or []
+    fallback = entry.get("created_at")
+    if not isinstance(fallback, datetime):
+        fallback = MIN_DATETIME_UTC
+    return get_timeline_event_at(source_refs, fallback=fallback) or MIN_DATETIME_UTC
+
+
+def sort_timeline_entries(timeline):
+    """
+    Sort timeline entries in descending event order in place.
+    """
+    timeline.sort(key=get_timeline_entry_sort_key, reverse=True)
+    return timeline
+
+
+def build_timeline_entry(
+    summary_text,
+    entry_type,
+    ref_articles,
+    created_at=None,
+    event_at=None,
+):
     """
     Build a structured timeline entry.
     """
+    created_at = created_at or datetime.now(timezone.utc)
     return {
         "type": entry_type,
-        "created_at": created_at or datetime.now(timezone.utc),
+        "created_at": created_at,
+        "event_at": event_at
+        or get_timeline_event_at(ref_articles, fallback=created_at),
         "summary": (summary_text or "").strip(),
         "source_refs": build_timeline_source_refs(ref_articles),
     }
@@ -183,15 +222,43 @@ def render_timeline_summary(timeline):
     Render a structured timeline into a readable summary string.
     """
     rendered_entries = []
-    for entry in timeline or []:
+    for entry in sort_timeline_entries(list(timeline or [])):
         summary_text = (entry.get("summary") or "").strip()
         if not summary_text:
             continue
-        timestamp = format_timeline_timestamp(entry.get("created_at"))
+        timestamp = format_timeline_timestamp(
+            entry.get("event_at") or entry.get("created_at")
+        )
         rendered_entries.append(
             f"{timestamp}: {summary_text}" if timestamp else summary_text
         )
     return "\n\n".join(rendered_entries)
+
+
+def normalize_timeline_entry(entry):
+    """
+    Normalize a timeline entry to ensure event_at is always available.
+    """
+    if not isinstance(entry, dict):
+        return None
+
+    created_at = entry.get("created_at")
+    if not isinstance(created_at, datetime):
+        created_at = None
+    source_refs = entry.get("source_refs")
+    if not isinstance(source_refs, list):
+        source_refs = []
+    event_at = entry.get("event_at")
+    if not isinstance(event_at, datetime):
+        event_at = get_timeline_event_at(source_refs, fallback=created_at)
+
+    return {
+        "type": entry.get("type"),
+        "created_at": created_at,
+        "event_at": event_at,
+        "summary": (entry.get("summary") or "").strip(),
+        "source_refs": source_refs,
+    }
 
 
 def ensure_story_timeline(story):
@@ -199,7 +266,14 @@ def ensure_story_timeline(story):
     Normalize story timeline data in memory.
     """
     timeline = story.get("timeline")
-    story["timeline"] = timeline if isinstance(timeline, list) else []
+    if not isinstance(timeline, list):
+        timeline = []
+    story["timeline"] = [
+        normalized_entry
+        for normalized_entry in (normalize_timeline_entry(entry) for entry in timeline)
+        if normalized_entry and normalized_entry.get("summary")
+    ]
+    sort_timeline_entries(story["timeline"])
     story["summary"] = render_timeline_summary(story["timeline"])
     return story["timeline"]
 
@@ -497,6 +571,7 @@ async def summarize_story_async(
                     ref_articles=ref_articles,
                 )
             ]
+            sort_timeline_entries(story["timeline"])
             story["summary"] = render_timeline_summary(story["timeline"])
             return
 
@@ -537,6 +612,7 @@ async def summarize_story_async(
                 )
             )
 
+        sort_timeline_entries(story["timeline"])
         story["summary"] = render_timeline_summary(story.get("timeline") or [])
 
     except Exception as e:
@@ -831,6 +907,7 @@ def main():
     for story in active_stories:
         if story.get("is_updated"):
             sort_ref_articles(story["ref_articles"])
+            sort_timeline_entries(story.setdefault("timeline", []))
             new_visibility = story.get(
                 "_new_visibility", check_is_visible(story["ref_articles"])
             )
