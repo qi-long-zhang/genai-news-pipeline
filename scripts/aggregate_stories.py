@@ -302,28 +302,72 @@ def extract_final_summary(text):
     return text.strip()
 
 
-def extract_labeled_output(text, label):
+def extract_section_output(text, start_label, stop_labels=None):
     """
-    Extract content that follows a final labeled section.
+    Extract the content after a labeled section header up to the next header.
     """
     if not text:
         return ""
 
-    parts = re.split(
-        rf"(?:^|\n)\s*{re.escape(label)}\s*:?\s*",
-        text,
+    stop_labels = stop_labels or []
+    lines = text.splitlines()
+    start_idx = None
+    remainder = ""
+
+    start_pattern = re.compile(
+        rf"^\s*{re.escape(start_label)}(?:\s*:\s*(.*)|\s*)$",
         flags=re.IGNORECASE,
     )
-    if len(parts) > 1:
-        return parts[-1].strip()
-    return ""
+    stop_patterns = [
+        re.compile(rf"(?:^|\s){re.escape(label)}\s*:?", flags=re.IGNORECASE)
+        for label in stop_labels
+    ]
+
+    def truncate_at_stop_markers(value):
+        if not value:
+            return "", False
+
+        earliest_stop = None
+        for pattern in stop_patterns:
+            match = pattern.search(value)
+            if match and (earliest_stop is None or match.start() < earliest_stop):
+                earliest_stop = match.start()
+
+        if earliest_stop is None:
+            return value.strip(), False
+
+        return value[:earliest_stop].rstrip(), True
+
+    for idx, line in enumerate(lines):
+        match = start_pattern.match(line)
+        if match:
+            start_idx = idx
+            remainder, _ = truncate_at_stop_markers(match.group(1) or "")
+            break
+
+    if start_idx is None:
+        return ""
+
+    content_lines = []
+    if remainder:
+        content_lines.append(remainder)
+
+    for line in lines[start_idx + 1 :]:
+        truncated_line, stopped = truncate_at_stop_markers(line)
+        if stopped:
+            if truncated_line:
+                content_lines.append(truncated_line)
+            break
+        content_lines.append(truncated_line)
+
+    return "\n".join(content_lines).strip()
 
 
 def extract_final_update(text):
     """
     Extract timeline update text from model output.
     """
-    return extract_labeled_output(text, "Final Update") or text.strip()
+    return extract_section_output(text, "Final Update")
 
 
 def extract_final_headline(text):
@@ -331,7 +375,7 @@ def extract_final_headline(text):
     Extract headline from Meta Prompting output using the
     '**Final Headline:**' marker format.
     """
-    headline = extract_labeled_output(text, "Final Headline")
+    headline = extract_section_output(text, "Final Headline", ["Final Summary"])
     return headline.splitlines()[0].strip() if headline else ""
 
 
@@ -339,7 +383,7 @@ def extract_final_headline_update(text):
     """
     Extract incremental headline update from model output.
     """
-    headline = extract_labeled_output(text, "Final Headline Update")
+    headline = extract_section_output(text, "Final Headline Update", ["Final Update"])
     return headline.splitlines()[0].strip() if headline else ""
 
 
@@ -357,20 +401,27 @@ def build_empty_summary_message(response):
     return "Summary unavailable: model returned empty content."
 
 
+def normalize_marker_text(text):
+    """
+    Normalize model marker text for sentinel comparisons.
+    """
+    return re.sub(r"[\s\.\!\-_:]+", "", (text or "")).upper()
+
+
 def is_no_timeline_update(update_text):
     """
     Determine whether the model says there is no material update.
     """
-    normalized = re.sub(r"[\s\.\!\-_:]+", "", (update_text or "")).upper()
-    return normalized == TIMELINE_NO_UPDATE
+    normalized = normalize_marker_text(update_text)
+    return normalized == normalize_marker_text(TIMELINE_NO_UPDATE)
 
 
 def is_no_headline_update(headline_text):
     """
     Determine whether the model says the headline should remain unchanged.
     """
-    normalized = re.sub(r"[\s\.\!\-_:]+", "", (headline_text or "")).upper()
-    return normalized == HEADLINE_NO_UPDATE
+    normalized = normalize_marker_text(headline_text)
+    return normalized == normalize_marker_text(HEADLINE_NO_UPDATE)
 
 
 def cache_source_article(source_article, collection_name, source_article_cache):
