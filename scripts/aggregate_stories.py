@@ -1,13 +1,14 @@
-import os
-import json
-import re
 import asyncio
-import numpy as np
-import networkx as nx
+import json
+import os
+import re
 from datetime import datetime, timedelta, timezone
-from pymongo import MongoClient, UpdateOne
+
+import networkx as nx
+import numpy as np
 from dotenv import load_dotenv
 from google import genai
+from pymongo import MongoClient, UpdateOne
 
 # Load environment variables
 load_dotenv()
@@ -29,6 +30,10 @@ SIMILARITY_THRESHOLD = 0.9  # For merging into existing stories or clustering ne
 HOT_STORIES_COLLECTION = "hot_stories"
 NEW_ARTICLE_WINDOW_HOURS = 24  # Look back 24 hours for new articles
 STORY_RETENTION_HOURS = 24  # Keep articles in a story for 24 hours
+PROMPT_REF_ARTICLE_LIMIT = 5
+TIMELINE_NO_UPDATE = "NO_UPDATE"
+HEADLINE_NO_UPDATE = "NO_HEADLINE_UPDATE"
+MIN_DATETIME_UTC = datetime.min.replace(tzinfo=timezone.utc)
 
 
 def get_active_stories(db):
@@ -121,6 +126,84 @@ def get_cover_images(ref_articles):
     return [ref.get("cover_image") for ref in (ref_articles or [])]
 
 
+def get_ref_sort_key(ref_article):
+    """
+    Build a stable sort key for ref_articles.
+    """
+    return ref_article.get("update_date") or MIN_DATETIME_UTC
+
+
+def sort_ref_articles(ref_articles):
+    """
+    Sort ref_articles in descending update order in place.
+    """
+    ref_articles.sort(key=get_ref_sort_key, reverse=True)
+    return ref_articles
+
+
+def build_timeline_source_refs(ref_articles):
+    """
+    Store lightweight source metadata on each timeline entry for traceability.
+    """
+    return [
+        {
+            "article_id": ref.get("article_id"),
+            "collection": ref.get("collection"),
+            "url": ref.get("url"),
+            "title": ref.get("title"),
+            "update_date": ref.get("update_date"),
+        }
+        for ref in (ref_articles or [])
+    ]
+
+
+def build_timeline_entry(summary_text, entry_type, ref_articles, created_at=None):
+    """
+    Build a structured timeline entry.
+    """
+    return {
+        "type": entry_type,
+        "created_at": created_at or datetime.now(timezone.utc),
+        "summary": (summary_text or "").strip(),
+        "source_refs": build_timeline_source_refs(ref_articles),
+    }
+
+
+def format_timeline_timestamp(value):
+    """
+    Render a UTC timestamp for timeline display.
+    """
+    if not isinstance(value, datetime):
+        return ""
+    return value.astimezone(timezone.utc).strftime("%Y-%m-%d %H:%M UTC")
+
+
+def render_timeline_summary(timeline):
+    """
+    Render a structured timeline into a readable summary string.
+    """
+    rendered_entries = []
+    for entry in timeline or []:
+        summary_text = (entry.get("summary") or "").strip()
+        if not summary_text:
+            continue
+        timestamp = format_timeline_timestamp(entry.get("created_at"))
+        rendered_entries.append(
+            f"{timestamp}: {summary_text}" if timestamp else summary_text
+        )
+    return "\n\n".join(rendered_entries)
+
+
+def ensure_story_timeline(story):
+    """
+    Normalize story timeline data in memory.
+    """
+    timeline = story.get("timeline")
+    story["timeline"] = timeline if isinstance(timeline, list) else []
+    story["summary"] = render_timeline_summary(story["timeline"])
+    return story["timeline"]
+
+
 def load_prompt_template(prompt_key):
     """
     Load production prompt template.
@@ -145,22 +228,45 @@ def extract_final_summary(text):
     return text.strip()
 
 
+def extract_labeled_output(text, label):
+    """
+    Extract content that follows a final labeled section.
+    """
+    if not text:
+        return ""
+
+    parts = re.split(
+        rf"(?:^|\n)\s*{re.escape(label)}\s*:?\s*",
+        text,
+        flags=re.IGNORECASE,
+    )
+    if len(parts) > 1:
+        return parts[-1].strip()
+    return ""
+
+
+def extract_final_update(text):
+    """
+    Extract timeline update text from model output.
+    """
+    return extract_labeled_output(text, "Final Update") or text.strip()
+
+
 def extract_final_headline(text):
     """
     Extract headline from Meta Prompting output using the
     '**Final Headline:**' marker format.
     """
-    if not text:
-        return ""
+    headline = extract_labeled_output(text, "Final Headline")
+    return headline.splitlines()[0].strip() if headline else ""
 
-    marker = "Final Headline:"
-    if marker not in text:
-        return ""
 
-    headline = text.split(marker, 1)[1].strip()
-    headline = headline.splitlines()[0].strip() if headline else ""
-
-    return headline
+def extract_final_headline_update(text):
+    """
+    Extract incremental headline update from model output.
+    """
+    headline = extract_labeled_output(text, "Final Headline Update")
+    return headline.splitlines()[0].strip() if headline else ""
 
 
 def build_empty_summary_message(response):
@@ -175,6 +281,22 @@ def build_empty_summary_message(response):
         return f"Summary unavailable: model response blocked ({reason})."
 
     return "Summary unavailable: model returned empty content."
+
+
+def is_no_timeline_update(update_text):
+    """
+    Determine whether the model says there is no material update.
+    """
+    normalized = re.sub(r"[\s\.\!\-_:]+", "", (update_text or "")).upper()
+    return normalized == TIMELINE_NO_UPDATE
+
+
+def is_no_headline_update(headline_text):
+    """
+    Determine whether the model says the headline should remain unchanged.
+    """
+    normalized = re.sub(r"[\s\.\!\-_:]+", "", (headline_text or "")).upper()
+    return normalized == HEADLINE_NO_UPDATE
 
 
 def cache_source_article(source_article, collection_name, source_article_cache):
@@ -254,6 +376,47 @@ def format_prompt(ref_articles, template, source_article_cache):
     return template.format(content=content)
 
 
+def format_timeline_update_prompt(
+    story,
+    new_ref_articles,
+    template,
+    source_article_cache,
+):
+    """
+    Format the prompt for generating an incremental timeline update.
+    """
+    new_article_keys = {
+        (ref.get("collection"), ref.get("article_id"))
+        for ref in (new_ref_articles or [])
+    }
+    existing_titles = []
+    for ref in story.get("ref_articles", []):
+        ref_key = (ref.get("collection"), ref.get("article_id"))
+        if ref_key not in new_article_keys and ref.get("title"):
+            existing_titles.append(ref["title"])
+
+    existing_timeline = render_timeline_summary(story.get("timeline") or [])
+    new_content_parts = []
+    for article_ref in new_ref_articles[:PROMPT_REF_ARTICLE_LIMIT]:
+        source_article = get_source_article_for_ref(article_ref, source_article_cache)
+        article_content = extract_article_content(source_article)
+        if article_content:
+            new_content_parts.append(article_content)
+
+    if not new_content_parts:
+        return None
+
+    return template.format(
+        headline=story.get("headline") or "",
+        existing_timeline=existing_timeline or "No existing timeline.",
+        existing_titles="\n".join(
+            f"- {title}" for title in existing_titles[:PROMPT_REF_ARTICLE_LIMIT]
+        )
+        or "- None",
+        new_content="\n\n".join(new_content_parts).strip(),
+    )
+
+
 async def generate_content_with_retry_async(aclient, prompt, story_id):
     """
     Call Gemini API with retry logic and request timeout.
@@ -283,60 +446,113 @@ async def summarize_story_async(
     semaphore,
     single_prompt_template,
     multi_prompt_template,
+    timeline_update_prompt_template,
     source_article_cache,
 ):
     """
-    Generate story summary/headline.
-    Single article: headline is article title, summary generated by LLM when missing.
-    Multi article: headline and summary are generated by LLM when missing.
+    Generate initial timeline content for new stories, or append timeline updates
+    for existing stories with newly merged articles.
     """
     ref_articles = story.get("ref_articles") or []
     if not ref_articles:
         return
 
+    sort_ref_articles(ref_articles)
+    story["cover_images"] = get_cover_images(ref_articles)
+    timeline = ensure_story_timeline(story)
+    new_ref_articles = story.get("_new_ref_articles") or []
     is_multi_article = len(ref_articles) > 1
-    if is_multi_article:
-        ref_articles.sort(
-            key=lambda ref: ref.get("update_date"),
-            reverse=True,
-        )
-        # Update cover_images to match the sorted ref_articles
-        story["cover_images"] = get_cover_images(ref_articles)
     default_headline = ref_articles[0].get("title") or ""
-    story["headline"] = default_headline
-    prompt_template = (
-        multi_prompt_template if is_multi_article else single_prompt_template
-    )
+    if not story.get("headline"):
+        story["headline"] = default_headline
+
     try:
-        prompt = format_prompt(ref_articles[:5], prompt_template, source_article_cache)
+        if not timeline:
+            prompt_template = (
+                multi_prompt_template if is_multi_article else single_prompt_template
+            )
+            prompt = format_prompt(
+                ref_articles[:PROMPT_REF_ARTICLE_LIMIT],
+                prompt_template,
+                source_article_cache,
+            )
+            async with semaphore:
+                response = await generate_content_with_retry_async(
+                    aclient, prompt, story.get("_id")
+                )
+            response_text = (getattr(response, "text", "") or "").strip()
+            if not response_text:
+                initial_summary = build_empty_summary_message(response)
+            else:
+                initial_summary = extract_final_summary(response_text)
+                if is_multi_article:
+                    parsed_headline = extract_final_headline(response_text)
+                    if parsed_headline:
+                        story["headline"] = parsed_headline
+
+            story["timeline"] = [
+                build_timeline_entry(
+                    summary_text=initial_summary,
+                    entry_type="initial",
+                    ref_articles=ref_articles,
+                )
+            ]
+            story["summary"] = render_timeline_summary(story["timeline"])
+            return
+
+        if not new_ref_articles:
+            story["summary"] = render_timeline_summary(story.get("timeline") or [])
+            return
+
+        prompt = format_timeline_update_prompt(
+            story=story,
+            new_ref_articles=new_ref_articles,
+            template=timeline_update_prompt_template,
+            source_article_cache=source_article_cache,
+        )
+        if not prompt:
+            story["summary"] = render_timeline_summary(story.get("timeline") or [])
+            return
         async with semaphore:
             response = await generate_content_with_retry_async(
                 aclient, prompt, story.get("_id")
             )
         response_text = (getattr(response, "text", "") or "").strip()
         if not response_text:
-            story["summary"] = build_empty_summary_message(response)
+            story["summary"] = render_timeline_summary(story.get("timeline") or [])
             return
 
-        if is_multi_article:
-            parsed_headline = extract_final_headline(response_text)
-            if parsed_headline:
-                story["headline"] = parsed_headline
-        story["summary"] = extract_final_summary(response_text)
+        headline_update = extract_final_headline_update(response_text)
+        if headline_update and not is_no_headline_update(headline_update):
+            story["headline"] = headline_update
+
+        update_text = extract_final_update(response_text)
+        if update_text and not is_no_timeline_update(update_text):
+            story.setdefault("timeline", timeline or [])
+            story["timeline"].append(
+                build_timeline_entry(
+                    summary_text=update_text,
+                    entry_type="update",
+                    ref_articles=new_ref_articles,
+                )
+            )
+
+        story["summary"] = render_timeline_summary(story.get("timeline") or [])
 
     except Exception as e:
         story_id = story.get("_id")
-        print(f"Warning: Failed to summarize story {story_id}: {e}")
+        print(f"Warning: Failed to generate timeline content for story {story_id}: {e}")
 
 
 async def summarize_stories_async(
     stories,
     single_prompt_template,
     multi_prompt_template,
+    timeline_update_prompt_template,
     source_article_cache,
 ):
     """
-    Summarize stories concurrently with controlled concurrency.
+    Generate story timeline content concurrently with controlled concurrency.
     """
     if not stories:
         return
@@ -350,6 +566,7 @@ async def summarize_stories_async(
                 semaphore=semaphore,
                 single_prompt_template=single_prompt_template,
                 multi_prompt_template=multi_prompt_template,
+                timeline_update_prompt_template=timeline_update_prompt_template,
                 source_article_cache=source_article_cache,
             )
             for story in stories
@@ -361,16 +578,18 @@ def summarize_stories(
     stories,
     single_prompt_template,
     multi_prompt_template,
+    timeline_update_prompt_template,
     source_article_cache,
 ):
     """
-    Sync wrapper for async story summarization.
+    Sync wrapper for async story timeline generation.
     """
     asyncio.run(
         summarize_stories_async(
             stories=stories,
             single_prompt_template=single_prompt_template,
             multi_prompt_template=multi_prompt_template,
+            timeline_update_prompt_template=timeline_update_prompt_template,
             source_article_cache=source_article_cache,
         )
     )
@@ -422,8 +641,6 @@ def update_ref_articles_from_source(db, active_stories, source_article_cache):
         if updated:
             story["ref_articles"] = ref_articles
             story["is_updated"] = True
-            story["summary"] = None
-            story["headline"] = None
             updated_count += 1
 
     if updated_count > 0:
@@ -434,11 +651,23 @@ def update_ref_articles_from_source(db, active_stories, source_article_cache):
     return articles_to_mark
 
 
+def clear_story_transient_fields(story):
+    """
+    Remove in-memory bookkeeping fields before persistence.
+    """
+    for field_name in (
+        "_new_visibility",
+        "_new_ref_articles",
+    ):
+        story.pop(field_name, None)
+
+
 def main():
     client = MongoClient(MONGO_URI, tz_aware=True)
     db = client[MONGO_DATABASE]
     single_prompt_template = load_prompt_template("single")
     multi_prompt_template = load_prompt_template("multi")
+    timeline_update_prompt_template = load_prompt_template("timeline_update")
     has_db_operation = False
 
     # 1. Get currently active stories (lifecycle: True)
@@ -484,10 +713,10 @@ def main():
                     cache_source_article(
                         art, art.get("_collection_name"), source_article_cache
                     )
-                    story.setdefault("ref_articles", []).append(get_article_ref(art))
+                    new_ref_article = get_article_ref(art)
+                    story.setdefault("ref_articles", []).append(new_ref_article)
+                    story.setdefault("_new_ref_articles", []).append(new_ref_article)
                     story["is_updated"] = True
-                    story["summary"] = None
-                    story["headline"] = None
                     # Track article for needs_aggregation update
                     articles_to_mark.append((art["_collection_name"], art["_id"]))
                     found_match = True
@@ -524,6 +753,7 @@ def main():
                 )
 
             ref_articles = [get_article_ref(art) for art in component_articles]
+            sort_ref_articles(ref_articles)
             is_visible = check_is_visible(ref_articles)
 
             # Save all clusters that are visible
@@ -549,6 +779,7 @@ def main():
             stories=new_stories_to_insert,
             single_prompt_template=single_prompt_template,
             multi_prompt_template=multi_prompt_template,
+            timeline_update_prompt_template=timeline_update_prompt_template,
             source_article_cache=source_article_cache,
         )
 
@@ -574,23 +805,31 @@ def main():
     stories_to_summarize = []
     for story in active_stories:
         if story.get("is_updated"):
+            sort_ref_articles(story["ref_articles"])
             new_visibility = check_is_visible(story["ref_articles"])
             story["_new_visibility"] = new_visibility
+            timeline = ensure_story_timeline(story)
 
-            if new_visibility:
+            if new_visibility and (story.get("_new_ref_articles") or not timeline):
                 stories_to_summarize.append(story)
+            elif timeline:
+                story["summary"] = render_timeline_summary(timeline)
 
     summarize_stories(
         stories=stories_to_summarize,
         single_prompt_template=single_prompt_template,
         multi_prompt_template=multi_prompt_template,
+        timeline_update_prompt_template=timeline_update_prompt_template,
         source_article_cache=source_article_cache,
     )
 
     bulk_updates = []
     for story in active_stories:
         if story.get("is_updated"):
-            new_visibility = story.get("_new_visibility", check_is_visible(story["ref_articles"]))
+            sort_ref_articles(story["ref_articles"])
+            new_visibility = story.get(
+                "_new_visibility", check_is_visible(story["ref_articles"])
+            )
             update_data = {
                 "ref_articles": story["ref_articles"],
                 "cover_images": get_cover_images(story["ref_articles"]),
@@ -601,10 +840,11 @@ def main():
                 "is_active": story.get("is_active", True),
                 "is_visible": new_visibility,
                 "headline": story.get("headline"),
-                "summary": story.get("summary"),  # Include updated summary
+                "summary": story.get("summary"),
+                "timeline": story.get("timeline", []),
             }
             bulk_updates.append(UpdateOne({"_id": story["_id"]}, {"$set": update_data}))
-            story.pop("_new_visibility", None)
+            clear_story_transient_fields(story)
 
     if bulk_updates:
         db[HOT_STORIES_COLLECTION].bulk_write(bulk_updates)
@@ -616,6 +856,7 @@ def main():
     # 9. Mark source articles as aggregated (needs_aggregation=False)
     # Only execute after stories are successfully written to database
     if articles_to_mark:
+        articles_to_mark = list(dict.fromkeys(articles_to_mark))
         bulk_updates_by_collection = {coll_name: [] for coll_name in MONGO_COLLECTIONS}
         for coll_name, article_id in articles_to_mark:
             bulk_updates_by_collection[coll_name].append(
