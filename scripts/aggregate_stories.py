@@ -892,7 +892,6 @@ def main():
                 new_story = {
                     "created_at": datetime.now(timezone.utc),  # UTC
                     "updated_at": datetime.now(timezone.utc),  # UTC
-                    "latest_ref_article_at": get_latest_ref_article_at(ref_articles),
                     "is_active": True,
                     "is_visible": is_visible,
                     "ref_articles": ref_articles,
@@ -973,9 +972,6 @@ def main():
                 "ref_articles": story["ref_articles"],
                 "cover_images": get_cover_images(story["ref_articles"]),
                 "updated_at": datetime.now(timezone.utc),  # UTC
-                "latest_ref_article_at": get_latest_ref_article_at(
-                    story["ref_articles"]
-                ),
                 "latest_timeline_event_at": (
                     story["timeline"][0].get("event_at")
                     if story.get("timeline")
