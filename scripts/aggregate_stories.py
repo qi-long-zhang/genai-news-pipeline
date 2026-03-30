@@ -26,7 +26,7 @@ if "channel_news_asia" not in MONGO_COLLECTIONS:
     MONGO_COLLECTIONS.append("channel_news_asia")
 
 # Thresholds
-SIMILARITY_THRESHOLD = 0.9  # For merging into existing stories or clustering new ones
+SIMILARITY_THRESHOLD = 0.91  # For merging into existing stories or clustering new ones
 HOT_STORIES_COLLECTION = "hot_stories"
 NEW_ARTICLE_WINDOW_HOURS = 24  # Look back 24 hours for new articles
 STORY_RETENTION_HOURS = 24  # Keep articles in a story for 24 hours
