@@ -915,6 +915,13 @@ def main():
         )
 
         if new_stories_to_insert:
+            for story in new_stories_to_insert:
+                latest_timeline_entry = (story.get("timeline") or [None])[0]
+                story["latest_timeline_event_at"] = (
+                    latest_timeline_entry.get("event_at")
+                    if latest_timeline_entry
+                    else None
+                )
             db[HOT_STORIES_COLLECTION].insert_many(new_stories_to_insert)
             print(f"Created {len(new_stories_to_insert)} new stories.")
             has_db_operation = True
@@ -968,6 +975,11 @@ def main():
                 "updated_at": datetime.now(timezone.utc),  # UTC
                 "latest_ref_article_at": get_latest_ref_article_at(
                     story["ref_articles"]
+                ),
+                "latest_timeline_event_at": (
+                    story["timeline"][0].get("event_at")
+                    if story.get("timeline")
+                    else None
                 ),
                 "is_active": story.get("is_active", True),
                 "is_visible": new_visibility,
