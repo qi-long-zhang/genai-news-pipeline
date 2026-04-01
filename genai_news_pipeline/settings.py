@@ -1,4 +1,4 @@
-# Scrapy settings for Tweet2News project
+# Scrapy settings for genai-news-pipeline project
 #
 # For simplicity, this file contains only settings considered important or
 # commonly used. You can find more settings consulting the documentation:
@@ -13,10 +13,10 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
-BOT_NAME = "Tweet2News"
+BOT_NAME = "genai-news-pipeline"
 
-SPIDER_MODULES = ["Tweet2News.spiders"]
-NEWSPIDER_MODULE = "Tweet2News.spiders"
+SPIDER_MODULES = ["genai_news_pipeline.spiders"]
+NEWSPIDER_MODULE = "genai_news_pipeline.spiders"
 
 ADDONS = {}
 
@@ -50,13 +50,13 @@ DOWNLOAD_DELAY = 0.1
 # Enable or disable spider middlewares
 # See https://docs.scrapy.org/en/latest/topics/spider-middleware.html
 # SPIDER_MIDDLEWARES = {
-#    "Tweet2News.middlewares.Tweet2NewsSpiderMiddleware": 543,
+#    "genai_news_pipeline.middlewares.GenaiNewsPipelineSpiderMiddleware": 543,
 # }
 
 # Enable or disable downloader middlewares
 # See https://docs.scrapy.org/en/latest/topics/downloader-middleware.html
 DOWNLOADER_MIDDLEWARES = {
-    "Tweet2News.middlewares.CloudScraperMiddleware": 543,
+    "genai_news_pipeline.middlewares.CloudScraperMiddleware": 543,
 }
 
 # Enable or disable extensions
@@ -68,7 +68,7 @@ DOWNLOADER_MIDDLEWARES = {
 # Configure item pipelines
 # See https://docs.scrapy.org/en/latest/topics/item-pipeline.html
 ITEM_PIPELINES = {
-    "Tweet2News.pipelines.MongoPipeline": 300,
+    "genai_news_pipeline.pipelines.MongoPipeline": 300,
 }
 
 # Enable and configure the AutoThrottle extension (disabled by default)

@@ -4,7 +4,7 @@ from dateutil import parser
 from pymongo import MongoClient
 from urllib.parse import urljoin
 
-from Tweet2News.items import NewsArticleItem
+from genai_news_pipeline.items import NewsArticleItem
 
 
 class MothershipSpider(scrapy.Spider):

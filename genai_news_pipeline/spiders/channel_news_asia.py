@@ -6,7 +6,7 @@ from dateutil import parser
 from pymongo import MongoClient
 from w3lib.html import remove_tags, replace_entities
 
-from Tweet2News.items import NewsArticleItem
+from genai_news_pipeline.items import NewsArticleItem
 
 
 class ChannelNewsAsiaSpider(scrapy.Spider):

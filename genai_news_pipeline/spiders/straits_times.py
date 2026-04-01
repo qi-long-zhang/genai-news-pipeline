@@ -4,7 +4,7 @@ import json
 from dateutil import parser
 from pymongo import MongoClient
 
-from Tweet2News.items import NewsArticleItem
+from genai_news_pipeline.items import NewsArticleItem
 
 
 class StraitsTimesSpider(scrapy.Spider):
