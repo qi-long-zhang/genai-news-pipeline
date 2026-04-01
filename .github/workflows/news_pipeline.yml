@@ -3,9 +3,9 @@ name: News Pipeline
 on:
   workflow_dispatch:
   schedule:
-    # Every 30 minutes from 08:35 to 20:35 Singapore time.
-    - cron: "35 0-12 * * *"
-    - cron: "5 1-12 * * *"
+    # Every 30 minutes from 08:17 to 20:47 Singapore time.
+    - cron: "17 0-12 * * *"
+    - cron: "47 0-12 * * *"
 
 concurrency:
   group: news-pipeline
