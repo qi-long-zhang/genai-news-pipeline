@@ -1,0 +1,62 @@
+name: News Pipeline
+
+on:
+  workflow_dispatch:
+  schedule:
+    # Every hour from 08:35 to 20:35 Singapore time (00:35-12:35 UTC).
+    - cron: "35 0-12 * * *"
+
+concurrency:
+  group: news-pipeline
+  cancel-in-progress: false
+
+jobs:
+  pipeline:
+    name: News Pipeline
+    runs-on: ubuntu-latest
+    env:
+      MONGO_URI: ${{ secrets.MONGO_URI }}
+      MONGO_DATABASE: ${{ secrets.MONGO_DATABASE }}
+      MONGO_COLLECTIONS: ${{ secrets.MONGO_COLLECTIONS }}
+      GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+      PREDICTION_BATCH_SIZE: 10
+      SUMMARY_API_TIMEOUT_SECONDS: 90
+      SUMMARY_API_MAX_CONCURRENCY: 5
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v6
+
+      - name: Set up Python
+        id: setup-python
+        uses: actions/setup-python@v6
+        with:
+          python-version: "3.11"
+
+      - name: Restore venv cache
+        id: cache-venv-restore
+        uses: actions/cache/restore@v5
+        with:
+          path: .venv
+          key: ${{ runner.os }}-python-${{ steps.setup-python.outputs.python-version }}-venv-${{ hashFiles('requirements.txt') }}
+
+      - name: Install dependencies
+        if: steps.cache-venv-restore.outputs.cache-hit != 'true'
+        run: |
+          python -m venv .venv
+          . .venv/bin/activate
+          pip install --upgrade pip
+          pip install -r requirements.txt
+
+      - name: Save venv cache
+        if: steps.cache-venv-restore.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v5
+        with:
+          path: .venv
+          key: ${{ steps.cache-venv-restore.outputs.cache-primary-key }}
+
+      - name: Run spiders
+        run: .venv/bin/python scripts/run_spiders.py
+      - name: Run enrichment
+        run: .venv/bin/python scripts/enrich_articles.py
+      - name: Run aggregation
+        run: .venv/bin/python scripts/aggregate_stories.py
