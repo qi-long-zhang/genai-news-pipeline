@@ -121,6 +121,18 @@ It runs once per hour from `08:35` to `20:35` Singapore time and executes the fo
 2. `scripts/enrich_articles.py`
 3. `scripts/aggregate_stories.py`
 
+Before running this workflow on GitHub Actions, add these repository secrets:
+
+- `MONGO_URI`
+- `MONGO_DATABASE`
+- `MONGO_COLLECTIONS`
+- `GEMINI_API_KEY`
+
+Optional secrets for `sync_tweets.py` and `sync_tweets.yml`:
+
+- `TARGET_ACCOUNTS`
+- `TWITTER_API_KEY`
+
 ## Source Entry Points
 
 - `https://mothership.sg/`
