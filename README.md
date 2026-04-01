@@ -115,7 +115,7 @@ python scripts/sync_tweets.py
 
 The scheduled workflow is [`.github/workflows/news_pipeline.yml`](.github/workflows/news_pipeline.yml).
 
-It runs every 30 minutes from `08:35` to `20:35` Singapore time and executes the following steps in a single job:
+It runs every 30 minutes and executes the following steps in a single job:
 
 1. `scripts/run_spiders.py`
 2. `scripts/enrich_articles.py`
