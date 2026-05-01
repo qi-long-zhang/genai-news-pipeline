@@ -113,13 +113,26 @@ python scripts/sync_tweets.py
 
 ## GitHub Actions
 
-The scheduled workflow is [`.github/workflows/news_pipeline.yml`](.github/workflows/news_pipeline.yml).
+The workflow is [`.github/workflows/news_pipeline.yml`](.github/workflows/news_pipeline.yml).
 
-It runs every 30 minutes and executes the following steps in a single job:
+Scheduled runs are currently disabled. The workflow can still be started manually from the GitHub Actions page with `workflow_dispatch`.
+
+When it runs, it executes the following steps in a single job:
 
 1. `scripts/run_spiders.py`
 2. `scripts/enrich_articles.py`
 3. `scripts/aggregate_stories.py`
+
+To enable scheduled runs, uncomment the `schedule` block in [`.github/workflows/news_pipeline.yml`](.github/workflows/news_pipeline.yml):
+
+```yaml
+on:
+  workflow_dispatch:
+  schedule:
+    # Every 30 minutes from 06:17 to 20:47 Singapore time.
+    - cron: "17 0-12,22-23 * * *"
+    - cron: "47 0-12,22-23 * * *"
+```
 
 Before running this workflow on GitHub Actions, add these repository secrets:
 

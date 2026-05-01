@@ -2,10 +2,12 @@ name: News Pipeline
 
 on:
   workflow_dispatch:
-  schedule:
-    # Every 30 minutes from 06:17 to 20:47 Singapore time.
-    - cron: "17 0-12,22-23 * * *"
-    - cron: "47 0-12,22-23 * * *"
+  # Scheduled runs are currently disabled.
+  # To enable them, uncomment the schedule block below.
+  # schedule:
+  #   # Every 30 minutes from 06:17 to 20:47 Singapore time.
+  #   - cron: "17 0-12,22-23 * * *"
+  #   - cron: "47 0-12,22-23 * * *"
 
 concurrency:
   group: news-pipeline
