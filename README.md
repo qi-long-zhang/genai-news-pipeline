@@ -7,7 +7,7 @@ It is responsible for:
 - scraping articles from news sites
 - enriching fresh articles with classification and embeddings
 - aggregating related articles into `hot_stories`
-- running the pipeline on a schedule with GitHub Actions
+- running the pipeline manually or optionally on a schedule with GitHub Actions
 
 Current built-in sources:
 
